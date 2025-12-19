@@ -6,9 +6,19 @@ export async function updateSession(request: NextRequest) {
     request,
   });
 
+  // Check if Supabase is configured
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // Supabase not configured, allow request through
+    console.warn('Supabase not configured, skipping auth middleware');
+    return supabaseResponse;
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -33,9 +43,14 @@ export async function updateSession(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make your application
   // vulnerable to attacks.
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (error) {
+    console.error('Failed to get user from Supabase:', error);
+    // Continue without user on auth errors
+  }
 
   // Protected routes
   const protectedPaths = ['/dashboard', '/api/v1/workspaces'];

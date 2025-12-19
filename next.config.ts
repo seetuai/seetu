@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Required for Railway/Docker deployment
   output: 'standalone',
+  // Server configuration for Railway
+  serverExternalPackages: ['sharp'],
   images: {
     remotePatterns: [
       {

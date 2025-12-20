@@ -3,13 +3,24 @@
  * Handles file uploads to Supabase Storage (S3-compatible)
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Server-side Supabase client with service role key
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+// Lazy-initialized Supabase client (avoids build-time errors)
+let _supabase: SupabaseClient | null = null;
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Supabase environment variables not configured');
+    }
+
+    _supabase = createClient(supabaseUrl, supabaseServiceKey);
+  }
+  return _supabase;
+}
 
 // Bucket names
 export const BUCKETS = {
@@ -36,6 +47,8 @@ export async function uploadBuffer(
   contentType: string = 'image/png'
 ): Promise<UploadResult> {
   const path = `${Date.now()}-${filename}`;
+
+  const supabase = getSupabase();
 
   const { data, error } = await supabase.storage
     .from(bucket)
@@ -118,7 +131,7 @@ export async function uploadProductImage(
  * Delete a file from storage
  */
 export async function deleteFile(bucket: BucketName, path: string): Promise<void> {
-  const { error } = await supabase.storage.from(bucket).remove([path]);
+  const { error } = await getSupabase().storage.from(bucket).remove([path]);
 
   if (error) {
     console.error('[STORAGE] Delete error:', error);
@@ -134,7 +147,7 @@ export async function getSignedUrl(
   path: string,
   expiresInSeconds: number = 3600
 ): Promise<string> {
-  const { data, error } = await supabase.storage
+  const { data, error } = await getSupabase().storage
     .from(bucket)
     .createSignedUrl(path, expiresInSeconds);
 
@@ -151,6 +164,7 @@ export async function getSignedUrl(
  * Run this on startup or via migration
  */
 export async function ensureBucketsExist(): Promise<void> {
+  const supabase = getSupabase();
   for (const bucketName of Object.values(BUCKETS)) {
     const { data: buckets } = await supabase.storage.listBuckets();
     const exists = buckets?.some(b => b.name === bucketName);
@@ -174,5 +188,5 @@ export async function ensureBucketsExist(): Promise<void> {
  * Utility to check if storage is configured
  */
 export function isStorageConfigured(): boolean {
-  return !!(supabaseUrl && supabaseServiceKey);
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }

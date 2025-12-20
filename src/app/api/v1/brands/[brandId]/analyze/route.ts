@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { analyzeBrand } from '@/lib/brand-analysis';
 
 interface RouteParams {
   params: Promise<{ brandId: string }>;
@@ -51,13 +52,15 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     const apifyToken = process.env.APIFY_API_TOKEN;
     if (!apifyToken) {
+      console.error('APIFY_API_TOKEN not configured');
       return NextResponse.json(
-        { error: 'Service de scraping non configuré' },
+        { error: 'Service de scraping non configuré (APIFY_API_TOKEN manquant)' },
         { status: 500 }
       );
     }
 
     // Step 1: Fetch images from Instagram via Apify
+    console.log(`[BRAND_ANALYZE] Fetching Instagram data for @${cleanHandle}`);
     const actorUrl = `${APIFY_BASE_URL}/${APIFY_INSTAGRAM_ACTOR}/run-sync-get-dataset-items?token=${apifyToken}`;
 
     const apifyRes = await fetch(actorUrl, {
@@ -72,7 +75,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     });
 
     if (!apifyRes.ok) {
-      console.error('Apify error:', await apifyRes.text());
+      const errorText = await apifyRes.text();
+      console.error('Apify error:', errorText);
       return NextResponse.json(
         { error: 'Erreur lors de la récupération Instagram' },
         { status: 500 }
@@ -105,6 +109,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       }
     }
 
+    console.log(`[BRAND_ANALYZE] Found ${images.length} images, ${captions.length} captions`);
+
     if (images.length < 3) {
       return NextResponse.json(
         { error: 'Profil non trouvé ou pas assez de photos publiques' },
@@ -112,33 +118,27 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Step 2: Call brand analyze endpoint
-    const analyzeRes = await fetch(new URL('/api/v1/brand/analyze', req.url), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': req.headers.get('cookie') || '',
-      },
-      body: JSON.stringify({
-        imageUrls: images,
-        captions: captions.length >= 3 ? captions : undefined,
-        source: 'instagram',
-        socialHandle: cleanHandle,
-      }),
+    // Step 2: Analyze brand DNA using shared utility
+    console.log(`[BRAND_ANALYZE] Analyzing brand DNA...`);
+    const analyzeResult = await analyzeBrand({
+      imageUrls: images,
+      captions: captions.length >= 3 ? captions : undefined,
+      source: 'instagram',
+      socialHandle: cleanHandle,
     });
 
-    const analyzeData = await analyzeRes.json();
-
-    if (!analyzeRes.ok || !analyzeData.success) {
+    if (!analyzeResult.success || !analyzeResult.brandDNA) {
+      console.error('Brand analysis failed:', analyzeResult.error);
       return NextResponse.json(
-        { error: analyzeData.error || 'Erreur lors de l\'analyse' },
+        { error: analyzeResult.error || 'Erreur lors de l\'analyse' },
         { status: 500 }
       );
     }
 
-    const brandDNA = analyzeData.brandDNA;
+    const brandDNA = analyzeResult.brandDNA;
 
     // Step 3: Update brand with DNA
+    console.log(`[BRAND_ANALYZE] Updating brand with DNA...`);
     const updatedBrand = await prisma.brand.update({
       where: { id: brandId },
       data: {
@@ -160,6 +160,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       },
     });
 
+    console.log(`[BRAND_ANALYZE] Success! Brand ${brandId} updated`);
+
     return NextResponse.json({
       success: true,
       brand: updatedBrand,
@@ -167,6 +169,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     });
   } catch (error) {
     console.error('Error analyzing brand:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

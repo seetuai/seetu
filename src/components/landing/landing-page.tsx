@@ -201,11 +201,40 @@ export function LandingPage() {
         .logo-strip { display: flex; gap: 40px; opacity: 0.4; filter: grayscale(100%); margin-top: 3rem; align-items: center; }
         .logo-placeholder { font-weight: 800; font-size: 1.2rem; font-family: var(--font-display); letter-spacing: -1px; }
 
+        /* Creator Ecosystem Section */
+        .creator-section { background: linear-gradient(180deg, var(--bg) 0%, #FDF8F6 100%); border-top: 1px solid var(--border-light); }
+        .section-eyebrow { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.15em; color: var(--accent); margin-bottom: 0.75rem; text-transform: uppercase; }
+        .creator-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 3rem; }
+        .creator-card { background: white; padding: 32px; border-radius: 16px; border: 1px solid var(--border-light); transition: all 0.3s ease; position: relative; overflow: hidden; }
+        .creator-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--terracotta)); opacity: 0; transition: opacity 0.3s; }
+        .creator-card:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(198, 93, 59, 0.12); border-color: var(--accent); }
+        .creator-card:hover::before { opacity: 1; }
+        .creator-icon { width: 56px; height: 56px; background: linear-gradient(135deg, var(--accent), #D4785B); border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; color: white; font-size: 1.4rem; }
+        .creator-card h3 { font-family: var(--font-display); font-size: 1.3rem; margin-bottom: 12px; color: var(--text-main); }
+        .creator-card p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.6; margin-bottom: 20px; }
+        .creator-stat { display: flex; align-items: baseline; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border-light); }
+        .stat-value { font-family: var(--font-display); font-size: 1.8rem; font-weight: 800; color: var(--accent); }
+        .stat-label { font-size: 0.85rem; color: var(--text-muted); }
+
+        .trust-badges { display: flex; justify-content: center; flex-wrap: wrap; gap: 16px; margin-bottom: 3rem; }
+        .trust-badge { display: flex; align-items: center; gap: 10px; background: white; padding: 12px 20px; border-radius: 100px; border: 1px solid var(--border-light); font-size: 0.9rem; font-weight: 500; color: var(--text-main); transition: all 0.3s; }
+        .trust-badge i { color: var(--success-green); font-size: 1.1rem; }
+        .trust-badge:hover { border-color: var(--success-green); background: #F0FDF4; transform: translateY(-2px); }
+
+        .creator-cta { text-align: center; padding: 2rem; background: white; border-radius: 16px; border: 1px dashed var(--accent); }
+        .creator-cta p { color: var(--text-muted); margin-bottom: 1rem; font-size: 1rem; }
+        .btn-creator { display: inline-flex; align-items: center; gap: 10px; background: transparent; border: 2px solid var(--accent); color: var(--accent); padding: 14px 28px; border-radius: 8px; font-weight: 600; font-size: 1rem; text-decoration: none; transition: all 0.3s; }
+        .btn-creator:hover { background: var(--accent); color: white; transform: translateY(-2px); }
+        .btn-creator i { transition: transform 0.3s; }
+        .btn-creator:hover i { transform: translateX(4px); }
+
         .login-btn { font-size: 0.9rem; font-weight: 600; color: var(--text-main); padding: 8px 16px; border: 1px solid var(--border-light); border-radius: 4px; text-decoration: none; background: white; transition: all 0.2s; }
         .login-btn:hover { border-color: var(--accent); color: var(--accent); }
 
         @media (max-width: 1024px) {
-          .hero-grid, .manifesto-grid, .bento-grid, .learn-grid { grid-template-columns: 1fr; }
+          .hero-grid, .manifesto-grid, .bento-grid, .learn-grid, .creator-grid { grid-template-columns: 1fr; }
+          .trust-badges { gap: 10px; }
+          .trust-badge { padding: 10px 16px; font-size: 0.85rem; }
           .hero-section { padding-top: 8rem; }
           .ar-wrapper { height: 400px; margin-top: 3rem; }
           .slider-container { height: 350px; }
@@ -310,6 +339,78 @@ export function LandingPage() {
                   <div className="slider-label label-after">SEETU ENGINE</div>
                   <div className="slider-handle" style={{ left: `${sliderPos}%` }}><i className="fa-solid fa-arrows-left-right"></i></div>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Creator Ecosystem Section */}
+          <section className="creator-section">
+            <div className="container">
+              <div style={{ textAlign: 'center', maxWidth: '800px', margin: '0 auto', marginBottom: '3rem' }}>
+                <p className="section-eyebrow">ÉTHIQUE & AUTHENTICITÉ</p>
+                <h2 className="section-title">Des vrais talents. <span className="highlight">Vraiment rémunérés.</span></h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>
+                  Seetu connecte les marques à un réseau de créateurs locaux : photographes, mannequins, propriétaires de lieux.
+                  Chaque asset utilisé génère une rémunération directe.
+                </p>
+              </div>
+
+              <div className="creator-grid">
+                <div className="creator-card interactable">
+                  <div className="creator-icon"><i className="fa-solid fa-camera-retro"></i></div>
+                  <h3>Photographes</h3>
+                  <p>Vos styles et techniques alimentent notre IA. Vous êtes crédités et rémunérés à chaque utilisation.</p>
+                  <div className="creator-stat">
+                    <span className="stat-value">40%</span>
+                    <span className="stat-label">des revenus reversés</span>
+                  </div>
+                </div>
+
+                <div className="creator-card interactable">
+                  <div className="creator-icon"><i className="fa-solid fa-user-tie"></i></div>
+                  <h3>Mannequins</h3>
+                  <p>Votre image, votre contrôle. Consentement explicite et royalties sur chaque génération.</p>
+                  <div className="creator-stat">
+                    <span className="stat-value">100%</span>
+                    <span className="stat-label">consentement vérifié</span>
+                  </div>
+                </div>
+
+                <div className="creator-card interactable">
+                  <div className="creator-icon"><i className="fa-solid fa-location-dot"></i></div>
+                  <h3>Lieux Iconiques</h3>
+                  <p>Corniche, marchés, rooftops... Les propriétaires de lieux gagnent quand leur espace inspire.</p>
+                  <div className="creator-stat">
+                    <span className="stat-value">Dakar</span>
+                    <span className="stat-label">et bientôt toute l&apos;Afrique</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="trust-badges">
+                <div className="trust-badge interactable">
+                  <i className="fa-solid fa-shield-check"></i>
+                  <span>Assets 100% éthiques</span>
+                </div>
+                <div className="trust-badge interactable">
+                  <i className="fa-solid fa-hand-holding-dollar"></i>
+                  <span>Créateurs rémunérés</span>
+                </div>
+                <div className="trust-badge interactable">
+                  <i className="fa-solid fa-certificate"></i>
+                  <span>Traçabilité garantie</span>
+                </div>
+                <div className="trust-badge interactable">
+                  <i className="fa-solid fa-heart"></i>
+                  <span>Made in Africa</span>
+                </div>
+              </div>
+
+              <div className="creator-cta">
+                <p>Vous êtes créateur ?</p>
+                <Link href="/signup?creator=true" className="btn-creator interactable">
+                  Rejoindre le réseau <i className="fa-solid fa-arrow-right"></i>
+                </Link>
               </div>
             </div>
           </section>

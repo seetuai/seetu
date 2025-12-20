@@ -166,8 +166,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           voice_profile: brandDNA.voice_profile,
           vibe_summary: brandDNA.vibe_summary,
           analysis_summary_fr: brandDNA.analysis_summary_fr,
-        } as Prisma.InputJsonValue,
-        verbalDNA: brandDNA.verbal_dna ? brandDNA.verbal_dna as Prisma.InputJsonValue : undefined,
+        } as unknown as Prisma.InputJsonValue,
+        verbalDNA: brandDNA.verbal_dna ? brandDNA.verbal_dna as unknown as Prisma.InputJsonValue : undefined,
         analyzedAt: new Date(),
       },
     });

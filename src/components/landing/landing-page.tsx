@@ -312,18 +312,13 @@ export function LandingPage() {
           <section className="hero-section">
             <div className="container hero-grid">
               <div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '1.5rem', background: 'white', padding: '4px 10px', borderRadius: '50px', border: '1px solid var(--border-light)', fontSize: '0.75rem', color: '#666', fontWeight: 500 }}>
-                  <span style={{ width: '6px', height: '6px', background: 'var(--accent)', borderRadius: '50%' }}></span>
-                  Déjà 200+ marques connectées
-                </div>
-
                 <h1 className="hero-title">
                   L&apos;IA QUI CONNAÎT<br />
-                  <span className="highlight">VOS CODES</span>.
+                  <span className="highlight">VOTRE MARQUE</span>.
                 </h1>
 
                 <p style={{ fontSize: '1.1rem', color: 'var(--text-muted)', marginBottom: '0.5rem', maxWidth: '480px', lineHeight: 1.5 }}>
-                  Fini les stéréotypes. <strong>Seetu</strong> connecte vos données de vente à la réalité locale pour créer des campagnes qui convertissent.
+                  Fini les stéréotypes. <strong>Seetu</strong> croise vos données à la réalité locale pour créer des campagnes qui convertissent.
                 </p>
 
                 <div style={{ position: 'relative', zIndex: 10 }}>

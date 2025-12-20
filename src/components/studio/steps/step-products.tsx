@@ -144,7 +144,7 @@ export function StepProducts() {
             keywords: analysisData.keywords || [],
           };
           // Save analysis to database for future use
-          fetch(`/api/v1/products/${product.id}`, {
+          fetch(`/api/v1/products/${product.id}`, {  // Uses [productId] route
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

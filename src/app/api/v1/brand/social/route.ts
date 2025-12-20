@@ -144,7 +144,8 @@ export async function POST(req: NextRequest) {
 
 // Instagram scraper
 async function scrapeInstagram(handle: string, token: string) {
-  const actorUrl = `${APIFY_BASE_URL}/${APIFY_ACTORS.instagram}/run-sync-get-dataset-items`;
+  const cleanToken = token.trim();
+  const actorUrl = `${APIFY_BASE_URL}/${APIFY_ACTORS.instagram}/run-sync-get-dataset-items?token=${encodeURIComponent(cleanToken)}`;
 
   console.log(`[SOCIAL] Calling Apify for Instagram @${handle}`);
 
@@ -152,7 +153,6 @@ async function scrapeInstagram(handle: string, token: string) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token.trim()}`,
     },
     body: JSON.stringify({
       usernames: [handle],
@@ -217,13 +217,13 @@ async function scrapeInstagram(handle: string, token: string) {
 
 // TikTok scraper
 async function scrapeTikTok(handle: string, token: string) {
-  const actorUrl = `${APIFY_BASE_URL}/${APIFY_ACTORS.tiktok}/run-sync-get-dataset-items`;
+  const cleanToken = token.trim();
+  const actorUrl = `${APIFY_BASE_URL}/${APIFY_ACTORS.tiktok}/run-sync-get-dataset-items?token=${encodeURIComponent(cleanToken)}`;
 
   const response = await fetch(actorUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token.trim()}`,
     },
     body: JSON.stringify({
       profiles: [handle],
@@ -291,13 +291,13 @@ async function scrapeTikTok(handle: string, token: string) {
 
 // Facebook scraper
 async function scrapeFacebook(handle: string, token: string) {
-  const actorUrl = `${APIFY_BASE_URL}/${APIFY_ACTORS.facebook}/run-sync-get-dataset-items`;
+  const cleanToken = token.trim();
+  const actorUrl = `${APIFY_BASE_URL}/${APIFY_ACTORS.facebook}/run-sync-get-dataset-items?token=${encodeURIComponent(cleanToken)}`;
 
   const response = await fetch(actorUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token.trim()}`,
     },
     body: JSON.stringify({
       startUrls: [{ url: `https://www.facebook.com/${handle}` }],

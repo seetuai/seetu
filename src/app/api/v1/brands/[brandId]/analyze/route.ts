@@ -60,8 +60,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     // Step 1: Fetch images from Instagram via Apify
-    console.log(`[BRAND_ANALYZE] Fetching Instagram data for @${cleanHandle}`);
-    const actorUrl = `${APIFY_BASE_URL}/${APIFY_INSTAGRAM_ACTOR}/run-sync-get-dataset-items`;
+    const cleanToken = apifyToken.trim();
+    console.log(`[BRAND_ANALYZE] Fetching Instagram data for @${cleanHandle}, token starts with: ${cleanToken.slice(0, 10)}...`);
+    const actorUrl = `${APIFY_BASE_URL}/${APIFY_INSTAGRAM_ACTOR}/run-sync-get-dataset-items?token=${encodeURIComponent(cleanToken)}`;
 
     let apifyRes;
     try {
@@ -69,7 +70,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apifyToken}`,
         },
         body: JSON.stringify({
           usernames: [cleanHandle],

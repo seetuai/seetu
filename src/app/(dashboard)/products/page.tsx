@@ -778,90 +778,107 @@ export default function ProductsPage() {
           <div className="space-y-4">
             {/* Image with detected products and SVG segmentation outlines */}
             {pendingImageUrl && (
-              <div className="bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ maxHeight: '400px' }}>
-                {/* Container for image and overlays */}
-                <div className="relative inline-block">
-                  {/* Original image */}
+              <div className="bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden">
+                {/* Container for image and overlays - uses relative positioning */}
+                <div className="relative w-full" style={{ maxHeight: '350px' }}>
+                  {/* Original image - fill width, center vertically */}
                   <img
                     src={pendingImageUrl}
                     alt="Uploaded"
-                    className="block max-h-[400px] w-auto"
+                    className="w-full h-auto object-contain"
+                    style={{ maxHeight: '350px' }}
+                    onError={(e) => {
+                      console.error('[IMAGE] Failed to load:', pendingImageUrl);
+                      (e.target as HTMLImageElement).src = '/placeholder-product.png';
+                    }}
                   />
-                  {/* Dark overlay when we have SVG paths */}
-                  {detectedProducts.some(p => p.svgPath) && (
-                    <div className="absolute inset-0 bg-black/40 pointer-events-none" />
-                  )}
-                  {/* Per-product SVG outlines - each positioned at its bbox */}
+                  {/* Semi-transparent overlay */}
+                  <div className="absolute inset-0 bg-black/30 pointer-events-none" />
+                  {/* Per-product overlays - positioned using percentage of image */}
                   {detectedProducts.map((product, idx) => {
                     const colors = ['#8b5cf6', '#22c55e', '#f97316', '#ec4899', '#06b6d4'];
                     const color = colors[idx % colors.length];
                     const isSelected = selectedProductIds.includes(product.id);
 
+                    // Ensure bbox values are valid (0-1 range)
+                    const bbox = {
+                      x_min: Math.max(0, Math.min(1, product.bbox.x_min || 0)),
+                      y_min: Math.max(0, Math.min(1, product.bbox.y_min || 0)),
+                      x_max: Math.max(0, Math.min(1, product.bbox.x_max || 1)),
+                      y_max: Math.max(0, Math.min(1, product.bbox.y_max || 1)),
+                    };
+
                     return (
                       <div
                         key={product.id}
                         onClick={() => toggleProductSelection(product.id)}
-                        className="absolute cursor-pointer group"
+                        className="absolute cursor-pointer transition-all duration-200"
                         style={{
-                          left: `${product.bbox.x_min * 100}%`,
-                          top: `${product.bbox.y_min * 100}%`,
-                          width: `${(product.bbox.x_max - product.bbox.x_min) * 100}%`,
-                          height: `${(product.bbox.y_max - product.bbox.y_min) * 100}%`,
+                          left: `${bbox.x_min * 100}%`,
+                          top: `${bbox.y_min * 100}%`,
+                          width: `${(bbox.x_max - bbox.x_min) * 100}%`,
+                          height: `${(bbox.y_max - bbox.y_min) * 100}%`,
                           zIndex: isSelected ? 30 : 20,
                         }}
                       >
-                        {/* SVG path rendered inside bbox container - coordinates now align */}
-                        {product.svgPath ? (
+                        {/* Always show a visible box/outline */}
+                        <div
+                          className="absolute inset-0 rounded-md transition-all duration-200"
+                          style={{
+                            border: `3px solid ${color}`,
+                            backgroundColor: isSelected ? `${color}30` : `${color}15`,
+                            boxShadow: isSelected ? `0 0 20px ${color}80` : `0 0 10px ${color}40`,
+                          }}
+                        />
+
+                        {/* SVG path overlay if available */}
+                        {product.svgPath && (
                           <svg
                             viewBox="0 0 1 1"
                             preserveAspectRatio="none"
-                            className="w-full h-full overflow-visible"
+                            className="absolute inset-0 w-full h-full overflow-visible"
+                            style={{ pointerEvents: 'none' }}
                           >
                             <path
                               d={product.svgPath}
-                              fill={isSelected ? `${color}40` : `${color}20`}
+                              fill={isSelected ? `${color}50` : `${color}25`}
                               stroke={color}
-                              strokeWidth="2px"
-                              vectorEffect="non-scaling-stroke"
+                              strokeWidth="0.02"
                               style={{
-                                filter: `drop-shadow(0 0 3px ${color})`,
-                                transition: 'all 0.2s ease',
+                                filter: `drop-shadow(0 0 2px ${color})`,
                               }}
                             />
                           </svg>
-                        ) : (
-                          /* Fallback dashed box if no SVG path */
-                          <div
-                            className="w-full h-full border-2 border-dashed rounded"
-                            style={{ borderColor: color, backgroundColor: `${color}15` }}
-                          />
                         )}
 
-                        {/* Colored label at top */}
+                        {/* Colored number badge at top-left */}
                         <div
-                          className="absolute left-0 px-3 py-1.5 text-sm font-semibold rounded-lg shadow-lg whitespace-nowrap"
+                          className="absolute flex items-center gap-1.5 px-2 py-1 text-xs font-bold rounded shadow-lg"
                           style={{
-                            top: '-32px',
+                            top: '-8px',
+                            left: '-4px',
                             backgroundColor: color,
                             color: 'white',
-                            boxShadow: `0 2px 15px ${color}`,
+                            boxShadow: `0 2px 8px ${color}80`,
                           }}
                         >
-                          {product.description}
+                          <span className="w-4 h-4 bg-white/30 rounded-full flex items-center justify-center text-[10px]">
+                            {idx + 1}
+                          </span>
+                          <span className="max-w-[120px] truncate">{product.description}</span>
                         </div>
 
-                        {/* Selection indicator */}
+                        {/* Selection checkmark */}
                         {isSelected && (
                           <div
-                            className="absolute w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-white"
+                            className="absolute w-6 h-6 rounded-full flex items-center justify-center shadow-lg border-2 border-white"
                             style={{
-                              top: '-12px',
-                              right: '-12px',
+                              top: '-8px',
+                              right: '-8px',
                               backgroundColor: color,
-                              boxShadow: `0 2px 10px ${color}`,
                             }}
                           >
-                            <Check className="h-4 w-4 text-white" />
+                            <Check className="h-3.5 w-3.5 text-white" />
                           </div>
                         )}
                       </div>

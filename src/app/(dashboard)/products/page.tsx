@@ -776,100 +776,120 @@ export default function ProductsPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Image with detected products and SVG segmentation outlines */}
-            {pendingImageUrl && (
-              <div className="bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center" style={{ maxHeight: '400px' }}>
-                {/* Container for image and overlays */}
-                <div className="relative inline-block">
-                  {/* Original image */}
-                  <img
-                    src={pendingImageUrl}
-                    alt="Uploaded"
-                    className="block max-h-[400px] w-auto"
-                  />
-                  {/* Dark overlay when we have SVG paths */}
-                  {detectedProducts.some(p => p.svgPath) && (
-                    <div className="absolute inset-0 bg-black/40 pointer-events-none" />
-                  )}
-                  {/* Per-product SVG outlines - each positioned at its bbox */}
-                  {detectedProducts.map((product, idx) => {
-                    const colors = ['#8b5cf6', '#22c55e', '#f97316', '#ec4899', '#06b6d4'];
-                    const color = colors[idx % colors.length];
-                    const isSelected = selectedProductIds.includes(product.id);
+            {/* Image with detected products highlighted */}
+            <div className="relative bg-slate-900 rounded-xl overflow-hidden" style={{ minHeight: '250px', maxHeight: '400px' }}>
+              {/* Debug info - remove after testing */}
+              {!pendingImageUrl && (
+                <div className="absolute inset-0 flex items-center justify-center text-white/50 text-sm">
+                  Image URL non disponible
+                </div>
+              )}
 
-                    return (
-                      <div
-                        key={product.id}
-                        onClick={() => toggleProductSelection(product.id)}
-                        className="absolute cursor-pointer group"
-                        style={{
-                          left: `${product.bbox.x_min * 100}%`,
-                          top: `${product.bbox.y_min * 100}%`,
-                          width: `${(product.bbox.x_max - product.bbox.x_min) * 100}%`,
-                          height: `${(product.bbox.y_max - product.bbox.y_min) * 100}%`,
-                          zIndex: isSelected ? 30 : 20,
-                        }}
-                      >
-                        {/* SVG path rendered inside bbox container - coordinates now align */}
-                        {product.svgPath ? (
-                          <svg
-                            viewBox="0 0 1 1"
-                            preserveAspectRatio="none"
-                            className="w-full h-full overflow-visible"
-                          >
-                            <path
-                              d={product.svgPath}
-                              fill={isSelected ? `${color}40` : `${color}20`}
-                              stroke={color}
-                              strokeWidth="2px"
-                              vectorEffect="non-scaling-stroke"
-                              style={{
-                                filter: `drop-shadow(0 0 3px ${color})`,
-                                transition: 'all 0.2s ease',
-                              }}
-                            />
-                          </svg>
-                        ) : (
-                          /* Fallback dashed box if no SVG path */
-                          <div
-                            className="w-full h-full border-2 border-dashed rounded"
-                            style={{ borderColor: color, backgroundColor: `${color}15` }}
-                          />
-                        )}
+              {/* Image container - centers the image */}
+              {pendingImageUrl && (
+                <div className="flex items-center justify-center h-full" style={{ minHeight: '250px' }}>
+                  <div className="relative inline-block max-w-full max-h-[400px]">
+                    {/* The actual image */}
+                    <img
+                      src={pendingImageUrl}
+                      alt="Uploaded product"
+                      className="block max-w-full max-h-[400px] h-auto w-auto"
+                      style={{ objectFit: 'contain' }}
+                    />
 
-                        {/* Colored label at top */}
+                    {/* Dark overlay when we have SVG paths */}
+                    {detectedProducts.some(p => p.svgPath) && (
+                      <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+                    )}
+
+                    {/* Per-product overlays - SVG paths rendered inside each bbox */}
+                    {detectedProducts.map((product, idx) => {
+                      const colors = ['#8b5cf6', '#22c55e', '#f97316', '#ec4899', '#06b6d4'];
+                      const color = colors[idx % colors.length];
+                      const isSelected = selectedProductIds.includes(product.id);
+
+                      // Clamp bbox values to 0-1 range
+                      const bbox = {
+                        x_min: Math.max(0, Math.min(1, product.bbox?.x_min ?? 0)),
+                        y_min: Math.max(0, Math.min(1, product.bbox?.y_min ?? 0)),
+                        x_max: Math.max(0, Math.min(1, product.bbox?.x_max ?? 1)),
+                        y_max: Math.max(0, Math.min(1, product.bbox?.y_max ?? 1)),
+                      };
+
+                      return (
                         <div
-                          className="absolute left-0 px-3 py-1.5 text-sm font-semibold rounded-lg shadow-lg whitespace-nowrap"
+                          key={product.id}
+                          onClick={() => toggleProductSelection(product.id)}
+                          className="absolute cursor-pointer group"
                           style={{
-                            top: '-32px',
-                            backgroundColor: color,
-                            color: 'white',
-                            boxShadow: `0 2px 15px ${color}`,
+                            left: `${bbox.x_min * 100}%`,
+                            top: `${bbox.y_min * 100}%`,
+                            width: `${(bbox.x_max - bbox.x_min) * 100}%`,
+                            height: `${(bbox.y_max - bbox.y_min) * 100}%`,
+                            zIndex: isSelected ? 30 : 20,
                           }}
                         >
-                          {product.description}
-                        </div>
+                          {/* SVG path rendered inside bbox - coordinates are relative to bbox */}
+                          {product.svgPath ? (
+                            <svg
+                              viewBox="0 0 1 1"
+                              preserveAspectRatio="none"
+                              className="w-full h-full overflow-visible"
+                            >
+                              <path
+                                d={product.svgPath}
+                                fill={isSelected ? `${color}40` : `${color}20`}
+                                stroke={color}
+                                strokeWidth="2px"
+                                vectorEffect="non-scaling-stroke"
+                                style={{
+                                  filter: `drop-shadow(0 0 3px ${color})`,
+                                  transition: 'all 0.2s ease',
+                                }}
+                              />
+                            </svg>
+                          ) : (
+                            /* Fallback dashed box if no SVG path */
+                            <div
+                              className="w-full h-full border-2 border-dashed rounded"
+                              style={{ borderColor: color, backgroundColor: `${color}15` }}
+                            />
+                          )}
 
-                        {/* Selection indicator */}
-                        {isSelected && (
+                          {/* Colored label at top */}
                           <div
-                            className="absolute w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-white"
+                            className="absolute left-0 px-3 py-1.5 text-sm font-semibold rounded-lg shadow-lg whitespace-nowrap"
                             style={{
-                              top: '-12px',
-                              right: '-12px',
+                              top: '-32px',
                               backgroundColor: color,
-                              boxShadow: `0 2px 10px ${color}`,
+                              color: 'white',
+                              boxShadow: `0 2px 15px ${color}`,
                             }}
                           >
-                            <Check className="h-4 w-4 text-white" />
+                            {product.description}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+
+                          {/* Selection indicator */}
+                          {isSelected && (
+                            <div
+                              className="absolute w-7 h-7 rounded-full flex items-center justify-center shadow-lg border-2 border-white"
+                              style={{
+                                top: '-12px',
+                                right: '-12px',
+                                backgroundColor: color,
+                                boxShadow: `0 2px 10px ${color}`,
+                              }}
+                            >
+                              <Check className="h-4 w-4 text-white" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Product list */}
             <div className="space-y-2">

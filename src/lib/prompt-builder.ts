@@ -133,8 +133,11 @@ export async function constructPrompt(
     }
 
     sentences.push(productDesc);
+  } else if (brief.product?.name) {
+    // Use product name if no analysis available
+    sentences.push(`Professional product photography of: ${brief.product.name}. REPRODUCE THIS EXACT PRODUCT from the reference image.`);
   } else {
-    sentences.push('Professional product photography.');
+    sentences.push('Professional product photography. REPRODUCE THE EXACT PRODUCT from the reference image.');
   }
 
   // 2. Product modifications OR preservation instruction

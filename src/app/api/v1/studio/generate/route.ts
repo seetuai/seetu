@@ -447,14 +447,18 @@ async function generateWithGemini(
     const parts: any[] = [];
 
     // Add product image
+    console.log(`[STUDIO] Loading product image from: ${productImageUrl}`);
     const productImage = await urlToBase64(productImageUrl);
     if (productImage) {
+      console.log(`[STUDIO] Product image loaded: ${productImage.mimeType}, ${productImage.data.length} bytes base64`);
       parts.push({
         inlineData: {
           mimeType: productImage.mimeType,
           data: productImage.data,
         },
       });
+    } else {
+      console.error(`[STUDIO] FAILED to load product image from: ${productImageUrl}`);
     }
 
     // Add background reference if available

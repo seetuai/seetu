@@ -7,16 +7,15 @@ import { listMarketplaceAssets } from '@/lib/creators';
  * GET /api/v1/studio/backgrounds
  * Get all available backgrounds, optionally filtered by type
  * Includes both curated backgrounds AND approved marketplace locations
+ *
+ * NOTE: This endpoint is public for curated backgrounds.
+ * Marketplace locations are included only when authenticated.
  */
 export async function GET(req: NextRequest) {
   try {
-    // Verify auth
+    // Check auth (optional - used for marketplace locations)
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type');
@@ -45,9 +44,9 @@ export async function GET(req: NextRequest) {
 
     console.log('Found curated backgrounds:', curatedBackgrounds.length);
 
-    // Also fetch approved LOCATION assets from marketplace if type is real_place or not specified
+    // Also fetch approved LOCATION assets from marketplace if authenticated and type is real_place or not specified
     let marketplaceLocations: any[] = [];
-    if (!type || type === 'real_place') {
+    if (user && (!type || type === 'real_place')) {
       const locationAssets = await listMarketplaceAssets({ type: 'LOCATION', limit: 50 });
 
       // Transform marketplace locations to match Background format

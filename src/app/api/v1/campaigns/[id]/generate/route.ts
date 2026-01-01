@@ -63,7 +63,11 @@ export async function POST(
     const styledPrompt = applyStyleLock(basePrompt, styleLock);
 
     // Call the generation API
-    const generateRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/v1/studio/generate`, {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : 'http://localhost:3000';
+
+    const generateRes = await fetch(`${appUrl}/api/v1/studio/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -77,7 +81,19 @@ export async function POST(
       }),
     });
 
-    const generateData = await generateRes.json();
+    // Check if response has content
+    const responseText = await generateRes.text();
+    if (!responseText) {
+      throw new Error('Empty response from generation API');
+    }
+
+    let generateData;
+    try {
+      generateData = JSON.parse(responseText);
+    } catch {
+      console.error('[CAMPAIGN_GENERATE] Invalid JSON response:', responseText.substring(0, 200));
+      throw new Error('Invalid response from generation API');
+    }
 
     if (!generateRes.ok) {
       throw new Error(generateData.error || 'Generation failed');

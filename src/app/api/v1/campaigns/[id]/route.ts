@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { getCurrentUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 // ═══════════════════════════════════════════════════════════════
@@ -13,10 +12,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -24,21 +20,10 @@ export async function GET(
       );
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
     const campaign = await prisma.campaign.findFirst({
       where: {
         id,
-        userId: dbUser.id,
+        userId: user.id,
       },
       include: {
         brand: {
@@ -89,10 +74,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -100,20 +82,9 @@ export async function PATCH(
       );
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
     // Verify ownership
     const existing = await prisma.campaign.findFirst({
-      where: { id, userId: dbUser.id },
+      where: { id, userId: user.id },
     });
 
     if (!existing) {
@@ -166,10 +137,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -177,20 +145,9 @@ export async function DELETE(
       );
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
     // Verify ownership
     const existing = await prisma.campaign.findFirst({
-      where: { id, userId: dbUser.id },
+      where: { id, userId: user.id },
     });
 
     if (!existing) {

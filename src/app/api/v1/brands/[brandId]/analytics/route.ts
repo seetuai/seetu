@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { getCurrentUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { generatePerformanceInsights } from '@/lib/performance-analysis';
 import type { PerformanceInsights } from '@/lib/performance-analysis';
@@ -15,10 +14,7 @@ export async function GET(
 ) {
   try {
     const { brandId } = await params;
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -26,22 +22,11 @@ export async function GET(
       );
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
     // Verify brand ownership
     const brand = await prisma.brand.findFirst({
       where: {
         id: brandId,
-        userId: dbUser.id,
+        userId: user.id,
       },
     });
 
@@ -120,10 +105,7 @@ export async function POST(
 ) {
   try {
     const { brandId } = await params;
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -131,22 +113,11 @@ export async function POST(
       );
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
     // Verify brand ownership
     const brand = await prisma.brand.findFirst({
       where: {
         id: brandId,
-        userId: dbUser.id,
+        userId: user.id,
       },
     });
 

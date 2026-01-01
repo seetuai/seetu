@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { getCurrentUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { createDefaultStyleLock, validateStyleLock, generateStyleSeed } from '@/lib/style-lock';
 import type { StyleLock } from '@/lib/style-lock';
@@ -11,25 +10,11 @@ import type { StyleLock } from '@/lib/style-lock';
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
-      );
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
       );
     }
 
@@ -38,7 +23,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const offset = parseInt(searchParams.get('offset') || '0', 10);
 
-    const where: Record<string, unknown> = { userId: dbUser.id };
+    const where: Record<string, unknown> = { userId: user.id };
     if (status) {
       where.status = status;
     }
@@ -86,25 +71,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
-      );
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
       );
     }
 
@@ -163,7 +134,7 @@ export async function POST(request: NextRequest) {
     // Verify brand ownership if provided
     if (brandId) {
       const brand = await prisma.brand.findFirst({
-        where: { id: brandId, userId: dbUser.id },
+        where: { id: brandId, userId: user.id },
       });
 
       if (!brand) {
@@ -177,7 +148,7 @@ export async function POST(request: NextRequest) {
     // Create campaign
     const campaign = await prisma.campaign.create({
       data: {
-        userId: dbUser.id,
+        userId: user.id,
         name,
         brandId,
         templateId,

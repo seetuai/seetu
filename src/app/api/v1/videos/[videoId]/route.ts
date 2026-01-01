@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { getCurrentUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { checkVideoStatus } from '@/lib/kling';
 
@@ -14,10 +13,7 @@ export async function GET(
 ) {
   try {
     const { videoId } = await params;
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -25,22 +21,11 @@ export async function GET(
       );
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
     // Get video generation
     const video = await prisma.videoGeneration.findFirst({
       where: {
         id: videoId,
-        userId: dbUser.id,
+        userId: user.id,
       },
     });
 

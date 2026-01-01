@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { getCurrentUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import {
   createBatchJob,
@@ -20,26 +19,11 @@ import type { BatchStyleSettings } from '@/lib/batch-processor';
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
-      );
-    }
-
-    // Get database user
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
       );
     }
 
@@ -75,7 +59,7 @@ export async function POST(request: NextRequest) {
     const products = await prisma.product.findMany({
       where: {
         id: { in: productIds },
-        brand: { userId: dbUser.id },
+        brand: { userId: user.id },
       },
     });
 
@@ -87,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check credits
-    const creditCheck = await checkBatchCredits(dbUser.id, productIds.length);
+    const creditCheck = await checkBatchCredits(user.id, productIds.length);
     if (!creditCheck.hasEnough) {
       return NextResponse.json(
         {
@@ -100,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create batch job
-    const batchJob = await createBatchJob(dbUser.id, productIds, styleSettings);
+    const batchJob = await createBatchJob(user.id, productIds, styleSettings);
 
     // Return job info (processing will happen asynchronously or via webhook)
     return NextResponse.json({
@@ -125,26 +109,11 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
-      );
-    }
-
-    // Get database user
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
       );
     }
 
@@ -167,7 +136,7 @@ export async function GET(request: NextRequest) {
 
     // List all batch jobs for user
     const batchJobs = await prisma.batchJob.findMany({
-      where: { userId: dbUser.id },
+      where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
       take: 20,
       select: {

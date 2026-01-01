@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { getCurrentUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { getVideoCost, debitCredits, type VideoDuration, type VideoQuality } from '@/lib/credits';
 import { generateVideo, buildVideoPrompt, isKlingConfigured } from '@/lib/kling';
@@ -19,25 +18,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
-      );
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
       );
     }
 
@@ -80,12 +65,12 @@ export async function POST(request: NextRequest) {
     const creditsCost = getVideoCost(duration, quality);
 
     // Check credits
-    if (dbUser.creditUnits < creditsCost) {
+    if (user.creditUnits < creditsCost) {
       return NextResponse.json(
         {
           error: 'Insufficient credits',
           needed: creditsCost,
-          available: dbUser.creditUnits,
+          available: user.creditUnits,
         },
         { status: 402 }
       );
@@ -94,7 +79,7 @@ export async function POST(request: NextRequest) {
     // Create video generation record
     const videoGeneration = await prisma.videoGeneration.create({
       data: {
-        userId: dbUser.id,
+        userId: user.id,
         sourceImageUrl,
         prompt: prompt || buildVideoPrompt(),
         duration,
@@ -123,7 +108,7 @@ export async function POST(request: NextRequest) {
 
       // Debit credits
       const debitResult = await debitCredits({
-        userId: dbUser.id,
+        userId: user.id,
         units: creditsCost,
         reason: 'video_generation',
         refType: 'video_generation',
@@ -187,25 +172,11 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
-      );
-    }
-
-    const dbUser = await prisma.user.findUnique({
-      where: { authId: user.id },
-    });
-
-    if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
       );
     }
 
@@ -215,7 +186,7 @@ export async function GET(request: NextRequest) {
 
     const [videos, total] = await Promise.all([
       prisma.videoGeneration.findMany({
-        where: { userId: dbUser.id },
+        where: { userId: user.id },
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
@@ -231,7 +202,7 @@ export async function GET(request: NextRequest) {
           completedAt: true,
         },
       }),
-      prisma.videoGeneration.count({ where: { userId: dbUser.id } }),
+      prisma.videoGeneration.count({ where: { userId: user.id } }),
     ]);
 
     return NextResponse.json({

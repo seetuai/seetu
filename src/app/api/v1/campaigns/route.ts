@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { createDefaultStyleLock, validateStyleLock, generateStyleSeed } from '@/lib/style-lock';
 import type { StyleLock } from '@/lib/style-lock';
 
@@ -153,7 +154,7 @@ export async function POST(request: NextRequest) {
         brandId,
         templateId,
         targetCount,
-        styleLock: styleLock as unknown as Record<string, unknown>,
+        styleLock: styleLock as unknown as Prisma.InputJsonValue,
         styleSeed: generateStyleSeed(),
         status: 'draft',
       },

@@ -4,6 +4,7 @@
  */
 
 import prisma from './prisma';
+import { Prisma } from '@prisma/client';
 import { debitCredits, CREDIT_UNIT_FINAL } from './credits';
 import type { BatchJob, BatchGeneration, Product } from '@prisma/client';
 
@@ -60,7 +61,7 @@ export async function createBatchJob(
       userId,
       productIds,
       totalProducts: productIds.length,
-      styleSettings: styleSettings as unknown as Record<string, unknown>,
+      styleSettings: styleSettings as unknown as Prisma.InputJsonValue,
       estimatedCredits,
     },
   });

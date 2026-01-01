@@ -8,13 +8,16 @@ import { Prisma } from '@prisma/client';
 import { debitCredits, CREDIT_UNIT_FINAL } from './credits';
 import type { BatchJob, BatchGeneration, Product } from '@prisma/client';
 
+// Type for BatchGeneration with included Product
+export type BatchGenerationWithProduct = BatchGeneration & { product: Product };
+
 // ═══════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════
 
 export interface BatchStyleSettings {
   presentation: 'product_only' | 'on_model' | 'ghost';
-  sceneType: 'studio' | 'real_place' | 'ai_generated';
+  sceneType: 'studio' | 'real_place' | 'ai_generated' | 'solid_color';
   backgroundId?: string;
   solidColor?: string;
   brandId?: string;
@@ -130,7 +133,7 @@ export async function getBatchJobProgress(batchJobId: string): Promise<BatchJobP
  * Start processing a batch job
  * This updates the job status and returns the generations to process
  */
-export async function startBatchProcessing(batchJobId: string): Promise<BatchGeneration[]> {
+export async function startBatchProcessing(batchJobId: string): Promise<BatchGenerationWithProduct[]> {
   // Update job status to processing
   await prisma.batchJob.update({
     where: { id: batchJobId },

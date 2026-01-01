@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   CheckCircle,
   XCircle,
   Loader2,
   Clock,
   Download,
+  Timer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -38,9 +39,15 @@ interface BatchProgressProps {
   onComplete?: () => void;
 }
 
+// Average time per generation in seconds
+const AVG_GENERATION_TIME = 30;
+
 export function BatchProgress({ batchJobId, onComplete }: BatchProgressProps) {
   const [progress, setProgress] = useState<BatchJobProgress | null>(null);
   const [isPolling, setIsPolling] = useState(true);
+  const [eta, setEta] = useState<string | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const processedAtStartRef = useRef<number>(0);
 
   useEffect(() => {
     if (!isPolling) return;
@@ -50,12 +57,47 @@ export function BatchProgress({ batchJobId, onComplete }: BatchProgressProps) {
         const res = await fetch(`/api/v1/batch/${batchJobId}`);
         const data = await res.json();
 
-        if (data.progress) {
-          setProgress(data.progress);
+        // Handle both direct response and nested progress response
+        const progressData = data.progress || data;
+
+        if (progressData && progressData.id) {
+          setProgress(progressData);
+
+          // Initialize start time on first poll
+          if (!startTimeRef.current && progressData.status === 'processing') {
+            startTimeRef.current = Date.now();
+            processedAtStartRef.current = progressData.processedCount || 0;
+          }
+
+          // Calculate ETA
+          if (progressData.status === 'processing' && startTimeRef.current) {
+            const elapsed = (Date.now() - startTimeRef.current) / 1000;
+            const processed = progressData.processedCount - processedAtStartRef.current;
+            const remaining = progressData.totalProducts - progressData.processedCount;
+
+            if (processed > 0) {
+              const avgTime = elapsed / processed;
+              const etaSeconds = Math.ceil(remaining * avgTime);
+
+              if (etaSeconds < 60) {
+                setEta(`${etaSeconds}s`);
+              } else {
+                const minutes = Math.floor(etaSeconds / 60);
+                const seconds = etaSeconds % 60;
+                setEta(`${minutes}m ${seconds}s`);
+              }
+            } else {
+              // Estimate based on average time
+              const etaSeconds = remaining * AVG_GENERATION_TIME;
+              const minutes = Math.floor(etaSeconds / 60);
+              setEta(`~${minutes}m`);
+            }
+          }
 
           // Stop polling if completed or failed
-          if (['completed', 'failed', 'partial'].includes(data.progress.status)) {
+          if (['completed', 'failed', 'partial'].includes(progressData.status)) {
             setIsPolling(false);
+            setEta(null);
             onComplete?.();
           }
         }
@@ -140,8 +182,16 @@ export function BatchProgress({ batchJobId, onComplete }: BatchProgressProps) {
         </div>
 
         <div className="flex items-center justify-between mt-4 text-sm text-slate-500">
-          <span>Crédits utilisés: {Math.floor(progress.usedCredits / 100)}</span>
-          <span>Estimé: {Math.floor(progress.estimatedCredits / 100)} crédits</span>
+          <span>Credits utilises: {Math.floor(progress.usedCredits / 100)}</span>
+          <div className="flex items-center gap-4">
+            {eta && progress.status === 'processing' && (
+              <span className="flex items-center gap-1 text-blue-600">
+                <Timer className="h-3 w-3" />
+                ETA: {eta}
+              </span>
+            )}
+            <span>Estime: {Math.floor(progress.estimatedCredits / 100)} credits</span>
+          </div>
         </div>
       </div>
 

@@ -5,12 +5,9 @@ import {
   createBatchJob,
   checkBatchCredits,
   getBatchJobProgress,
-  startBatchProcessing,
-  markGenerationProcessing,
-  completeGeneration,
-  failGeneration,
-  debitBatchGenerationCredits,
 } from '@/lib/batch-processor';
+import { enqueueBatchJob } from '@/lib/queues/batch-queue';
+import { getPresetById } from '@/lib/batch-presets';
 import type { BatchStyleSettings } from '@/lib/batch-processor';
 
 // ═══════════════════════════════════════════════════════════════
@@ -28,10 +25,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { productIds, styleSettings } = body as {
+    const { productIds, styleSettings, presetId } = body as {
       productIds: string[];
-      styleSettings: BatchStyleSettings;
+      styleSettings?: BatchStyleSettings;
+      presetId?: string;
     };
+
+    // Get preset settings if presetId provided
+    const preset = presetId ? getPresetById(presetId) : undefined;
+    const finalStyleSettings = preset?.settings || styleSettings;
 
     // Validation
     if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
@@ -48,9 +50,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!styleSettings) {
+    if (!finalStyleSettings) {
       return NextResponse.json(
-        { error: 'styleSettings is required' },
+        { error: 'styleSettings or presetId is required' },
         { status: 400 }
       );
     }
@@ -84,15 +86,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Create batch job
-    const batchJob = await createBatchJob(user.id, productIds, styleSettings);
+    const batchJob = await createBatchJob(user.id, productIds, finalStyleSettings);
 
-    // Return job info (processing will happen asynchronously or via webhook)
+    // Enqueue for background processing
+    const jobId = await enqueueBatchJob({
+      batchJobId: batchJob.id,
+      userId: user.id,
+      presetId,
+    });
+
+    console.log(`[BATCH] Job ${batchJob.id} enqueued as ${jobId}`);
+
+    // Return job info
     return NextResponse.json({
       success: true,
       batchJobId: batchJob.id,
       totalProducts: batchJob.totalProducts,
       estimatedCredits: batchJob.estimatedCredits,
-      message: 'Batch job created. Poll /api/v1/batch/{id} for status.',
+      presetId: presetId,
+      presetName: preset?.nameFr,
+      message: 'Batch job started. Poll /api/v1/batch/{id} for progress.',
     });
   } catch (error) {
     console.error('[BATCH] Error creating batch job:', error);

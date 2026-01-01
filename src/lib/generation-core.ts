@@ -64,14 +64,38 @@ export interface VerbalDNA {
  * Build a WizardBrief from a product and style settings
  */
 export function buildBriefFromProduct(
-  product: Product & { metadata?: { analysis?: ProductAnalysis } | null },
+  product: Product & { metadata?: Record<string, unknown> | null },
   styleSettings: BatchStyleSettings,
   brandId?: string
 ): WizardBrief {
-  // Extract product analysis from metadata if available
-  const analysis = product.metadata && typeof product.metadata === 'object'
-    ? (product.metadata as { analysis?: ProductAnalysis }).analysis
-    : undefined;
+  // Extract product analysis from metadata
+  // Analysis can be stored either:
+  // 1. Directly in metadata (category, colors, etc.) - from products page
+  // 2. Under metadata.analysis - legacy format
+  let analysis: ProductAnalysis | undefined;
+
+  if (product.metadata && typeof product.metadata === 'object') {
+    const meta = product.metadata as Record<string, unknown>;
+
+    // Check if analysis is nested under 'analysis' key (legacy)
+    if (meta.analysis && typeof meta.analysis === 'object') {
+      analysis = meta.analysis as ProductAnalysis;
+    }
+    // Otherwise check if analysis fields are at top level (products page format)
+    else if (meta.category || meta.colors || meta.description) {
+      analysis = {
+        category: (meta.category as string) || '',
+        subcategory: (meta.subcategory as string) || '',
+        name: product.name || '',
+        colors: (meta.colors as string[]) || [],
+        materials: (meta.materials as string[]) || [],
+        style: (meta.style as string) || '',
+        description: (meta.description as string) || '',
+        suggestedContexts: (meta.suggestedContexts as string[]) || [],
+        keywords: (meta.keywords as string[]) || [],
+      };
+    }
+  }
 
   return {
     product: {

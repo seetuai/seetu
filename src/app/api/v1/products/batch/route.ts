@@ -41,17 +41,22 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    if (!brand) {
+      return NextResponse.json(
+        { error: 'No brand found. Please create a brand first.' },
+        { status: 400 }
+      );
+    }
+
     // Create products for each image
     const products = await Promise.all(
       images.map(async (img: { imageUrl: string; name: string }, index: number) => {
         const product = await prisma.product.create({
           data: {
-            userId: user.id,
-            brandId: brand?.id,
+            brandId: brand.id,
             name: img.name || `Product ${index + 1}`,
             thumbnailUrl: img.imageUrl,
             originalUrl: img.imageUrl,
-            status: 'ready',
           },
         });
         return product;

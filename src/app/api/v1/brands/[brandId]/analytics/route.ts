@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { generatePerformanceInsights } from '@/lib/performance-analysis';
 import type { PerformanceInsights } from '@/lib/performance-analysis';
 
@@ -77,7 +78,7 @@ export async function GET(
     await prisma.brand.update({
       where: { id: brandId },
       data: {
-        performanceInsights: insights as unknown as Record<string, unknown>,
+        performanceInsights: insights as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -148,7 +149,7 @@ export async function POST(
     await prisma.brand.update({
       where: { id: brandId },
       data: {
-        performanceInsights: insights as unknown as Record<string, unknown>,
+        performanceInsights: insights as unknown as Prisma.InputJsonValue,
       },
     });
 

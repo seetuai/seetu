@@ -133,9 +133,9 @@ export async function constructPrompt(
     }
 
     sentences.push(productDesc);
-  } else if (brief.product?.name) {
-    // Use product name if no analysis available
-    sentences.push(`Professional product photography of: ${brief.product.name}. REPRODUCE THIS EXACT PRODUCT from the reference image.`);
+  } else if (brief.product?.analysis?.name) {
+    // Use product name if no full analysis available
+    sentences.push(`Professional product photography of: ${brief.product.analysis.name}. REPRODUCE THIS EXACT PRODUCT from the reference image.`);
   } else {
     sentences.push('Professional product photography. REPRODUCE THE EXACT PRODUCT from the reference image.');
   }

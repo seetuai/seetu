@@ -1,0 +1,143 @@
+'use client';
+
+import { useState } from 'react';
+import useSWR from 'swr';
+import { Bell, AlertTriangle, AlertCircle, Info, CheckCircle, Download } from 'lucide-react';
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+interface Alert {
+  id: string;
+  type: 'critical' | 'warning' | 'info' | 'resolved';
+  title: string;
+  description: string;
+  timestamp: string;
+  billboardId?: string;
+  read: boolean;
+}
+
+export default function AlertsPage() {
+  const [activeTab, setActiveTab] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
+  const [selectedAlerts, setSelectedAlerts] = useState<string[]>([]);
+
+  const { data } = useSWR('/api/v1/admin/billboards/activity', fetcher);
+
+  const mockAlerts: Alert[] = [
+    { id: '1', type: 'critical', title: 'Billboard Offline: Almadies Screen 2', description: 'Connectivity lost. Heartbeat signal timed out.', timestamp: '2 mins ago', billboardId: 'ALM-002', read: false },
+    { id: '2', type: 'critical', title: 'High Risk Content Detected', description: 'AI scan flagged non-compliant imagery in campaign.', timestamp: '15 mins ago', read: false },
+    { id: '3', type: 'warning', title: 'Payment Failed for User #842', description: 'Monthly subscription renewal failed.', timestamp: '1 hour ago', read: false },
+    { id: '4', type: 'info', title: 'Scheduled Maintenance: Yoff Sector', description: 'Network optimization scheduled for 02:00 AM.', timestamp: '3 hours ago', read: false },
+    { id: '5', type: 'resolved', title: 'New Billboard Registered: Ngor', description: 'Billboard NGR-005 successfully registered and online.', timestamp: 'Yesterday', billboardId: 'NGR-005', read: true },
+  ];
+
+  const alerts = data?.alerts || mockAlerts;
+  const stats = data?.stats || { total: 24, critical: 2, warning: 8, info: 14 };
+
+  const filteredAlerts = activeTab === 'all' ? alerts : alerts.filter((a: Alert) => a.type === activeTab);
+
+  const toggleSelect = (id: string) => {
+    setSelectedAlerts((prev) => prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]);
+  };
+
+  const typeConfig = {
+    critical: { color: 'border-red-500/20', stripe: 'bg-red-500', iconBg: 'bg-red-500/10 text-red-500', icon: AlertCircle },
+    warning: { color: 'border-amber-500/20', stripe: 'bg-amber-500', iconBg: 'bg-amber-500/10 text-amber-500', icon: AlertTriangle },
+    info: { color: 'border-[#135bec]/20', stripe: 'bg-[#135bec]', iconBg: 'bg-[#135bec]/10 text-[#135bec]', icon: Info },
+    resolved: { color: 'border-[#282e39]', stripe: 'bg-[#282e39]', iconBg: 'bg-[#282e39] text-[#9da6b9]', icon: CheckCircle },
+  };
+
+  return (
+    <div className="p-8 space-y-6 max-w-5xl mx-auto">
+      <div className="flex items-end justify-between">
+        <div>
+          <h2 className="text-3xl font-black tracking-tight">Alert Center</h2>
+          <p className="text-[#9da6b9] mt-1">Real-time monitoring and system status</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#282e39] rounded-lg text-sm font-medium hover:bg-[#3b4453] transition-colors">
+            <Download className="h-4 w-4" /> Export Logs
+          </button>
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#135bec] text-white rounded-lg font-bold hover:bg-[#135bec]/90 transition-colors">
+            Mark all as read
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-[#282e39]">
+        <nav className="flex gap-8">
+          {[
+            { id: 'all', label: 'All Alerts', count: stats.total },
+            { id: 'critical', label: 'Critical', count: stats.critical },
+            { id: 'warning', label: 'Warnings', count: stats.warning },
+            { id: 'info', label: 'System Info', count: stats.info },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`pb-4 pt-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === tab.id ? 'border-[#135bec] text-[#135bec]' : 'border-transparent text-[#9da6b9] hover:text-white'
+              }`}
+            >
+              {tab.label}
+              {activeTab === tab.id && <span className="bg-[#135bec]/10 px-2 py-0.5 rounded text-[10px]">{tab.count}</span>}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Alert List */}
+      <div className="space-y-3">
+        {filteredAlerts.map((alert: Alert) => {
+          const config = typeConfig[alert.type];
+          const Icon = config.icon;
+          return (
+            <div
+              key={alert.id}
+              className={`flex items-center gap-4 bg-[#1c222d] p-4 rounded-xl border ${config.color} relative overflow-hidden ${alert.read ? 'opacity-60' : ''}`}
+            >
+              <div className={`absolute left-0 top-0 bottom-0 w-1 ${config.stripe}`} />
+              <div className="flex items-center h-full">
+                <input
+                  type="checkbox"
+                  checked={selectedAlerts.includes(alert.id)}
+                  onChange={() => toggleSelect(alert.id)}
+                  className="rounded border-[#282e39] text-[#135bec] focus:ring-[#135bec] bg-transparent size-5 cursor-pointer"
+                />
+              </div>
+              <div className={`size-12 rounded-lg flex items-center justify-center shrink-0 ${config.iconBg}`}>
+                <Icon className="h-6 w-6" />
+              </div>
+              <div className="flex-1 space-y-0.5">
+                <h4 className={`text-base font-bold ${alert.read ? 'text-[#9da6b9]' : 'text-white'}`}>{alert.title}</h4>
+                <p className="text-xs text-[#9da6b9]">{alert.timestamp} {alert.billboardId && `• ID: ${alert.billboardId}`}</p>
+                <p className="text-sm text-[#9da6b9] mt-1">{alert.description}</p>
+              </div>
+              <div className="shrink-0">
+                {alert.type !== 'resolved' ? (
+                  <button className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                    alert.type === 'critical' ? 'bg-[#135bec] text-white hover:bg-[#135bec]/90' : 'bg-[#282e39] text-white hover:bg-[#3b4453]'
+                  }`}>
+                    View Issue
+                  </button>
+                ) : (
+                  <button className="text-[#9da6b9] text-sm font-bold hover:underline">Details</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between pt-4 text-sm text-[#9da6b9]">
+        <p>Showing {filteredAlerts.length} of {stats.total} alerts</p>
+        <div className="flex gap-2">
+          <button className="px-4 py-2 rounded-lg bg-[#1c222d] text-white font-bold">1</button>
+          <button className="px-4 py-2 rounded-lg border border-[#282e39] hover:bg-[#1c222d]">2</button>
+          <button className="px-4 py-2 rounded-lg border border-[#282e39] hover:bg-[#1c222d]">Next</button>
+        </div>
+      </div>
+    </div>
+  );
+}

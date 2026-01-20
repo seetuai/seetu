@@ -64,7 +64,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Log only non-sensitive fields (no phone numbers or message content)
-    console.log('[WATI_WEBHOOK] Received event type:', body.eventType || body.type || 'unknown');
+    const eventType = body.eventType || body.type || 'unknown';
+    console.log('[WATI_WEBHOOK] Received event type:', eventType);
+
+    // IMPORTANT: Ignore outgoing message notifications to prevent infinite loops
+    // WATI sends webhooks for messages WE send (sessionMessageSent, templateMessageSent, etc.)
+    const outgoingEventTypes = [
+      'sessionMessageSent',
+      'templateMessageSent',
+      'sessionFileSent',
+      'interactiveMessageSent',
+      'messageSent',
+    ];
+
+    if (outgoingEventTypes.includes(eventType as string)) {
+      // This is a notification about a message WE sent - ignore it
+      return NextResponse.json({ received: true, ignored: 'outgoing_message' });
+    }
+
+    // Only process incoming messages (type: 'message' or similar)
+    if (eventType !== 'message' && eventType !== 'unknown') {
+      console.log('[WATI_WEBHOOK] Non-message event, ignoring:', eventType);
+      return NextResponse.json({ received: true });
+    }
 
     // Parse message from webhook payload
     const message = wati.parseWebhookMessage(body);

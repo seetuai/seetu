@@ -513,23 +513,32 @@ async function handleBillboardSelection(
     return { success: false, error: 'No content ID in session' };
   }
 
-  const payment = await createBillboardPayment({
-    contentId: session.currentContentId,
-    billboardIds,
-    amountCfa: pricing.totalCfa,
-    whatsappPhone: message.phone,
-  });
+  try {
+    const payment = await createBillboardPayment({
+      contentId: session.currentContentId,
+      billboardIds,
+      amountCfa: pricing.totalCfa,
+      whatsappPhone: message.phone,
+    });
 
-  await setPaymentId(message.phone, payment.id);
-  await updateSessionState(message.phone, 'AWAITING_PAYMENT');
+    await setPaymentId(message.phone, payment.id);
+    await updateSessionState(message.phone, 'AWAITING_PAYMENT');
 
-  // Send payment link
-  await wati.sendMessage({
-    phone: message.phone,
-    message: `${templates.PAYMENT_PROMPT}\n\n${templates.formatPaymentLink(payment.checkoutUrl)}`,
-  });
+    // Send payment link
+    await wati.sendMessage({
+      phone: message.phone,
+      message: `${templates.PAYMENT_PROMPT}\n\n${templates.formatPaymentLink(payment.checkoutUrl)}`,
+    });
 
-  return { success: true };
+    return { success: true };
+  } catch (error) {
+    console.error('[WA_HANDLER] Payment creation failed:', error);
+    await wati.sendMessage({
+      phone: message.phone,
+      message: `Une erreur est survenue lors de la création du paiement. Veuillez réessayer en envoyant le nom du panneau à nouveau.\n\nSi le problème persiste, envoyez "support" pour nous contacter.`,
+    });
+    return { success: false, error: 'Payment creation failed' };
+  }
 }
 
 /**

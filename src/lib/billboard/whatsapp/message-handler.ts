@@ -254,17 +254,26 @@ async function handleMediaState(
       throw new Error(`Failed to download media: ${response.status}`);
     }
 
+    console.log('[WA_HANDLER] Media downloaded successfully, size:', response.headers.get('content-length'));
+
     const buffer = Buffer.from(await response.arrayBuffer());
+    console.log('[WA_HANDLER] Buffer created, size:', buffer.length);
+
     const contentType = response.headers.get('content-type') ||
       (message.type === 'video' ? 'video/mp4' : 'image/jpeg');
     const extension = message.type === 'video' ? 'mp4' : 'jpg';
+    const filename = `billboard-whatsapp-${message.phone}-${Date.now()}.${extension}`;
+
+    console.log('[WA_HANDLER] Uploading to storage:', filename, contentType);
 
     const upload = await uploadBuffer(
       BUCKETS.UPLOADS,
       buffer,
-      `billboard-whatsapp-${message.phone}-${Date.now()}.${extension}`,
+      filename,
       contentType
     );
+
+    console.log('[WA_HANDLER] Upload complete:', upload.url);
 
     // Create content record
     const content = await prisma.billboardContent.create({
@@ -277,16 +286,20 @@ async function handleMediaState(
       },
     });
 
+    console.log('[WA_HANDLER] Content record created:', content.id);
+
     // Update session with content ID
     await setSessionContent(message.phone, content.id);
 
     // Enqueue validation job
+    console.log('[WA_HANDLER] Enqueueing validation job...');
     await enqueueValidation({
       contentId: content.id,
       originalUrl: upload.url,
       whatsappPhone: message.phone,
     });
 
+    console.log('[WA_HANDLER] Validation job enqueued successfully');
     return { success: true };
   } catch (error) {
     console.error('[WA_HANDLER] Media upload error:', error);

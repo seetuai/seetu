@@ -317,36 +317,66 @@ class WatiClient {
    */
   parseWebhookMessage(body: Record<string, unknown>): WatiMessage | null {
     try {
-      // WATI webhook format parsing
+      // Log full payload for debugging media messages
+      const msgType = body.type || body.messageType;
+      if (msgType === 'image' || msgType === 'video' || body.media) {
+        console.log('[WATI] Media webhook payload:', JSON.stringify(body, null, 2));
+      }
+
+      // WATI webhook format parsing - extract phone from various possible locations
+      const phone = body.waId as string ||
+                    body.phone as string ||
+                    body.whatsappNumber as string ||
+                    (body.contact as Record<string, string>)?.wa_id ||
+                    '';
+
       const message: WatiMessage = {
-        id: body.id as string || '',
-        phone: body.waId as string || body.phone as string || '',
+        id: body.id as string || body.messageId as string || '',
+        phone,
         type: 'text',
-        timestamp: new Date(body.timestamp as string || Date.now()),
+        timestamp: new Date(body.timestamp as string || body.created as string || Date.now()),
       };
 
       // Determine message type and content
-      if (body.type === 'text' || body.text) {
+      // WATI uses different structures depending on webhook version
+      const messageType = body.type || body.messageType;
+
+      if (messageType === 'text' || body.text) {
         message.type = 'text';
-        message.text = (body.text as { body?: string })?.body || body.text as string || '';
-      } else if (body.type === 'image' || body.image) {
+        const textObj = body.text as Record<string, string> | string;
+        message.text = typeof textObj === 'string' ? textObj : textObj?.body || '';
+      } else if (messageType === 'image' || body.image) {
         message.type = 'image';
-        const media = body.image as Record<string, string>;
-        message.mediaUrl = media?.url || media?.link;
-      } else if (body.type === 'video' || body.video) {
+        // WATI image can be in body.image or body.media
+        const media = (body.image || body.media) as Record<string, string>;
+        // URL can be in different fields: url, link, data, or nested in media object
+        message.mediaUrl = media?.url || media?.link || media?.data ||
+                           (body.data as Record<string, string>)?.url ||
+                           body.mediaUrl as string;
+        console.log('[WATI] Extracted image URL:', message.mediaUrl);
+      } else if (messageType === 'video' || body.video) {
         message.type = 'video';
-        const media = body.video as Record<string, string>;
-        message.mediaUrl = media?.url || media?.link;
-      } else if (body.type === 'button' || body.button) {
+        const media = (body.video || body.media) as Record<string, string>;
+        message.mediaUrl = media?.url || media?.link || media?.data ||
+                           (body.data as Record<string, string>)?.url ||
+                           body.mediaUrl as string;
+        console.log('[WATI] Extracted video URL:', message.mediaUrl);
+      } else if (messageType === 'document' || body.document) {
+        message.type = 'document';
+        const media = (body.document || body.media) as Record<string, string>;
+        message.mediaUrl = media?.url || media?.link || media?.data ||
+                           (body.data as Record<string, string>)?.url ||
+                           body.mediaUrl as string;
+      } else if (messageType === 'button' || body.button) {
         message.type = 'button_reply';
         const button = body.button as Record<string, string>;
         message.buttonId = button?.payload || button?.id;
         message.buttonText = button?.text;
-      } else if (body.type === 'list_reply' || body.list_reply) {
+      } else if (messageType === 'list_reply' || body.list_reply || body.interactive) {
         message.type = 'list_reply';
-        const list = body.list_reply as Record<string, string>;
-        message.listId = list?.id;
-        message.listTitle = list?.title;
+        const list = (body.list_reply || body.interactive) as Record<string, string>;
+        message.listId = list?.id || list?.list_reply?.id;
+        message.listTitle = list?.title || list?.list_reply?.title;
       }
 
       return message;

@@ -198,3 +198,49 @@ export function isValidImageUrl(urlString: string): boolean {
   });
   return validation.valid;
 }
+
+/**
+ * Validate and sanitize a local file path
+ * Prevents path traversal attacks (../, absolute paths, etc.)
+ * Only allows files in /public directory during development
+ */
+export function validateLocalPath(requestedPath: string): { valid: boolean; error?: string; safePath?: string } {
+  // Block local file access in production entirely
+  if (process.env.NODE_ENV === 'production') {
+    return { valid: false, error: 'Local file access not allowed in production' };
+  }
+
+  // Must start with /
+  if (!requestedPath.startsWith('/')) {
+    return { valid: false, error: 'Path must start with /' };
+  }
+
+  // Block path traversal attempts
+  if (requestedPath.includes('..') || requestedPath.includes('\\')) {
+    return { valid: false, error: 'Path traversal not allowed' };
+  }
+
+  // Block null bytes and other dangerous characters
+  if (/[\x00-\x1f]/.test(requestedPath)) {
+    return { valid: false, error: 'Invalid characters in path' };
+  }
+
+  // Only allow specific extensions
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+  const ext = requestedPath.toLowerCase().split('.').pop();
+  if (!ext || !allowedExtensions.includes(`.${ext}`)) {
+    return { valid: false, error: 'File extension not allowed' };
+  }
+
+  // Normalize the path and verify it stays within public/
+  const path = require('path');
+  const publicDir = path.resolve(process.cwd(), 'public');
+  const resolvedPath = path.resolve(publicDir, requestedPath.slice(1)); // Remove leading /
+
+  // Verify the resolved path is still within public/
+  if (!resolvedPath.startsWith(publicDir + path.sep)) {
+    return { valid: false, error: 'Path escapes public directory' };
+  }
+
+  return { valid: true, safePath: resolvedPath };
+}

@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = JSON.parse(rawBody);
-    console.log('[WEBHOOK] Received payload:', payload);
+    // Log only non-sensitive fields
+    console.log('[WEBHOOK] Received:', { order_id: payload.order_id, status: payload.status });
 
     const { order_id, status, amount } = payload;
 

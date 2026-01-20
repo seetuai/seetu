@@ -8,6 +8,7 @@ import { debitCredits } from '@/lib/credits';
 import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from '@/lib/rate-limit';
 import { uploadGeneratedImage, getAssetImageSignedUrls } from '@/lib/storage';
 import { recordAssetUsage } from '@/lib/creators';
+import { safeFetchImage, isValidImageUrl, validateLocalPath } from '@/lib/safe-fetch';
 import type { WizardBrief } from '@/lib/stores/wizard-store';
 import type { BrandDNA, VerbalDNA, ProductAnalysis } from '@/types';
 
@@ -654,7 +655,7 @@ Create a photorealistic, commercial-quality image that looks like it was shot by
 }
 
 /**
- * Convert URL to base64
+ * Convert URL to base64 with security protections
  */
 async function urlToBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
   try {
@@ -669,43 +670,50 @@ async function urlToBase64(url: string): Promise<{ data: string; mimeType: strin
     }
 
     if (url.startsWith('/')) {
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      const filePath = path.join(process.cwd(), 'public', url);
-
-      // Check if file exists
-      try {
-        await fs.access(filePath);
-      } catch {
-        console.error('[urlToBase64] Local file not found:', filePath);
+      // Local file - only in development with path validation
+      const pathValidation = validateLocalPath(url);
+      if (!pathValidation.valid) {
+        console.error('[urlToBase64] Path validation failed:', pathValidation.error);
         return null;
       }
 
-      const buffer = await fs.readFile(filePath);
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      // Check if file exists
+      try {
+        await fs.access(pathValidation.safePath!);
+      } catch {
+        console.error('[urlToBase64] Local file not found:', pathValidation.safePath);
+        return null;
+      }
+
+      const buffer = await fs.readFile(pathValidation.safePath!);
       const ext = path.extname(url).toLowerCase();
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
       return { data: buffer.toString('base64'), mimeType };
     }
 
-    const response = await fetch(url);
-
-    // Check if the response is actually an image
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.startsWith('image/')) {
-      console.error('[urlToBase64] URL did not return an image:', url, 'Content-Type:', contentType);
+    // Remote URL - use SSRF-protected fetch
+    if (!isValidImageUrl(url)) {
+      console.error('[urlToBase64] URL not in allowlist:', url);
       return null;
     }
 
-    const buffer = await response.arrayBuffer();
-    // Clean up content-type (remove charset, duplicates, etc.)
-    let mimeType = contentType.split(';')[0].split(',')[0].trim() || 'image/jpeg';
-    // Normalize image/jpg to image/jpeg (jpg is not a valid MIME type)
-    if (mimeType === 'image/jpg') {
-      mimeType = 'image/jpeg';
+    try {
+      const { buffer, mimeType: fetchedMimeType } = await safeFetchImage(url);
+      let mimeType = fetchedMimeType;
+      // Normalize image/jpg to image/jpeg
+      if (mimeType === 'image/jpg') {
+        mimeType = 'image/jpeg';
+      }
+      return { data: buffer.toString('base64'), mimeType };
+    } catch (fetchError) {
+      console.error('[urlToBase64] Safe fetch error:', fetchError);
+      return null;
     }
-    return { data: Buffer.from(buffer).toString('base64'), mimeType };
   } catch (error) {
-    console.error('[urlToBase64] Error converting URL to base64:', error, 'URL:', url);
+    console.error('[urlToBase64] Error converting URL to base64:', error);
     return null;
   }
 }

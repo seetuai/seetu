@@ -14,17 +14,36 @@ export async function POST(request: NextRequest) {
     // Get raw body for signature verification
     const rawBody = await request.text();
 
-    // Verify webhook signature
+    // Verify webhook signature - REQUIRED in production (fail closed)
     const wati = getWatiClient();
     const signature = request.headers.get('x-wati-signature') ||
                       request.headers.get('x-hub-signature-256');
 
-    if (signature && !wati.verifyWebhookSignature(rawBody, signature)) {
-      console.error('[WATI_WEBHOOK] Invalid signature');
-      return NextResponse.json(
-        { error: 'Invalid signature' },
-        { status: 401 }
-      );
+    // In production, always require valid signature
+    if (process.env.NODE_ENV === 'production') {
+      if (!signature) {
+        console.error('[WATI_WEBHOOK] Missing signature header in production');
+        return NextResponse.json(
+          { error: 'Signature required' },
+          { status: 401 }
+        );
+      }
+      if (!wati.verifyWebhookSignature(rawBody, signature)) {
+        console.error('[WATI_WEBHOOK] Invalid signature');
+        return NextResponse.json(
+          { error: 'Invalid signature' },
+          { status: 401 }
+        );
+      }
+    } else {
+      // In development, signature is optional but validated if present
+      if (signature && !wati.verifyWebhookSignature(rawBody, signature)) {
+        console.error('[WATI_WEBHOOK] Invalid signature');
+        return NextResponse.json(
+          { error: 'Invalid signature' },
+          { status: 401 }
+        );
+      }
     }
 
     // Parse body
@@ -39,8 +58,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Log incoming webhook for debugging
-    console.log('[WATI_WEBHOOK] Received:', JSON.stringify(body, null, 2));
+    // Log only non-sensitive fields (no phone numbers or message content)
+    console.log('[WATI_WEBHOOK] Received event type:', body.eventType || body.type || 'unknown');
 
     // Parse message from webhook payload
     const message = wati.parseWebhookMessage(body);

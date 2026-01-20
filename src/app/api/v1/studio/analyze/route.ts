@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { analyzeProduct } from '@/lib/vision';
-import { safeFetchImage, isValidImageUrl } from '@/lib/safe-fetch';
+import { safeFetchImage, isValidImageUrl, validateLocalPath } from '@/lib/safe-fetch';
 
 /**
  * POST /api/v1/studio/analyze
@@ -53,11 +53,17 @@ export async function POST(req: NextRequest) {
     } else if (imageUrl) {
       // Handle image URL
       if (imageUrl.startsWith('/')) {
-        // Local file - this path is only for local development
+        // Local file - only in development with path validation
+        const pathValidation = validateLocalPath(imageUrl);
+        if (!pathValidation.valid) {
+          return NextResponse.json(
+            { error: pathValidation.error },
+            { status: 400 }
+          );
+        }
         const fs = await import('fs/promises');
         const path = await import('path');
-        const filePath = path.join(process.cwd(), 'public', imageUrl);
-        const buffer = await fs.readFile(filePath);
+        const buffer = await fs.readFile(pathValidation.safePath!);
         imageBase64 = buffer.toString('base64');
         const ext = path.extname(imageUrl).toLowerCase();
         mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';

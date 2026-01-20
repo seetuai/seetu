@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import prisma from '@/lib/prisma';
+import { checkRateLimit, getRateLimitKey, RATE_LIMITS, rateLimitResponse } from '@/lib/rate-limit';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,17 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit by IP to prevent brute force attacks
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] ||
+               request.headers.get('x-real-ip') ||
+               'unknown';
+    const rateLimitKey = getRateLimitKey(null, 'auth-login', ip);
+    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.auth);
+    const rateLimitError = rateLimitResponse(rateLimit);
+    if (rateLimitError) {
+      return rateLimitError;
+    }
+
     const body = await request.json();
     const { email, password } = body;
 

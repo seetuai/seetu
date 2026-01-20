@@ -14,15 +14,16 @@ export async function POST(request: NextRequest) {
     // Get raw body for signature verification
     const rawBody = await request.text();
 
-    // Verify webhook signature - REQUIRED in production (fail closed)
+    // Verify webhook signature
     const wati = getWatiClient();
     const signature = request.headers.get('x-wati-signature') ||
                       request.headers.get('x-hub-signature-256');
+    const webhookSecretConfigured = !!process.env.WATI_WEBHOOK_SECRET;
 
-    // In production, always require valid signature
-    if (process.env.NODE_ENV === 'production') {
+    // If webhook secret is configured, require and validate signature
+    if (webhookSecretConfigured) {
       if (!signature) {
-        console.error('[WATI_WEBHOOK] Missing signature header in production');
+        console.error('[WATI_WEBHOOK] Missing signature header (WATI_WEBHOOK_SECRET is configured)');
         return NextResponse.json(
           { error: 'Signature required' },
           { status: 401 }
@@ -36,7 +37,11 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
-      // In development, signature is optional but validated if present
+      // No webhook secret configured - allow but warn
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('[WATI_WEBHOOK] WATI_WEBHOOK_SECRET not configured - signature validation disabled');
+      }
+      // Still validate if signature is provided
       if (signature && !wati.verifyWebhookSignature(rawBody, signature)) {
         console.error('[WATI_WEBHOOK] Invalid signature');
         return NextResponse.json(

@@ -237,10 +237,21 @@ async function handleMediaState(
   });
 
   try {
-    // Download and upload media to storage
-    const response = await fetch(message.mediaUrl);
+    // Download media from WATI - requires authentication for WATI file URLs
+    const watiApiToken = process.env.WATI_API_TOKEN || '';
+    const fetchHeaders: Record<string, string> = {};
+
+    // Add auth for WATI URLs (they require Bearer token)
+    if (message.mediaUrl.includes('wati.io')) {
+      fetchHeaders['Authorization'] = `Bearer ${watiApiToken}`;
+    }
+
+    console.log('[WA_HANDLER] Downloading media from:', message.mediaUrl.substring(0, 80) + '...');
+    const response = await fetch(message.mediaUrl, { headers: fetchHeaders });
+
     if (!response.ok) {
-      throw new Error('Failed to download media');
+      console.error('[WA_HANDLER] Media download failed:', response.status, response.statusText);
+      throw new Error(`Failed to download media: ${response.status}`);
     }
 
     const buffer = Buffer.from(await response.arrayBuffer());

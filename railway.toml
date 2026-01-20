@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npx prisma db push --skip-generate && npm run start"
+startCommand = "npm run start"
 healthcheckPath = "/api/v1/print/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"

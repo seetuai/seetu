@@ -20,7 +20,6 @@ import * as templates from './templates';
 import { prisma } from '../../prisma';
 import { getBillboardPricing, calculatePrice, formatPriceCFA } from '../pricing';
 import { getContentQueuePositions } from '../queue-manager';
-import { enqueueValidation } from '../../queues/billboard-queue';
 import { uploadBuffer, BUCKETS } from '../../storage';
 import { createBillboardPayment } from '../payments';
 
@@ -291,15 +290,25 @@ async function handleMediaState(
     // Update session with content ID
     await setSessionContent(message.phone, content.id);
 
-    // Enqueue validation job
-    console.log('[WA_HANDLER] Enqueueing validation job...');
-    await enqueueValidation({
-      contentId: content.id,
-      originalUrl: upload.url,
-      whatsappPhone: message.phone,
+    // For MVP: Skip queue-based validation/moderation and go directly to billboard selection
+    // TODO: Enable queue-based processing when workers are deployed
+    console.log('[WA_HANDLER] MVP mode: Skipping queue, moving to billboard selection');
+
+    // Update content status (simulating validation pass)
+    await prisma.billboardContent.update({
+      where: { id: content.id },
+      data: { status: 'pending_payment' },
     });
 
-    console.log('[WA_HANDLER] Validation job enqueued successfully');
+    // Update session state and send billboard list
+    await updateSessionState(message.phone, 'AWAITING_BILLBOARD');
+    await wati.sendMessage({
+      phone: message.phone,
+      message: templates.MEDIA_VALIDATION_SUCCESS,
+    });
+    await sendBillboardList(message.phone);
+
+    console.log('[WA_HANDLER] Billboard selection list sent');
     return { success: true };
   } catch (error) {
     console.error('[WA_HANDLER] Media upload error:', error);

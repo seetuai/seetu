@@ -71,14 +71,13 @@ export const formatBillboardOption = (
    💰 ${formatPriceCFA(pricePerSlot)} / ${slotDurationMins} min${queueInfo}`;
 };
 
-export const BILLBOARD_SELECTION_PROMPT = `Répondez avec les numéros des panneaux souhaités, séparés par des virgules.
+export const BILLBOARD_SELECTION_PROMPT = `Dites-moi simplement quel(s) panneau(x) vous intéresse(nt).
 
-Exemple: 1, 3`;
+Par exemple: "Sea Plaza" ou "tous les panneaux" ou "Corniche et Almadies"`;
 
-export const BILLBOARD_INVALID_SELECTION = `Je n'ai pas compris votre sélection.
+export const BILLBOARD_INVALID_SELECTION = `Je n'ai pas trouvé de panneau correspondant.
 
-Veuillez répondre avec les numéros des panneaux, séparés par des virgules.
-Exemple: 1, 3`;
+Dites-moi le nom du panneau souhaité, par exemple "Sea Plaza" ou "tous".`;
 
 export const BILLBOARD_SELECTION_CONFIRMED = (count: number) =>
   `Vous avez sélectionné ${count} panneau${count > 1 ? 'x' : ''}.`;

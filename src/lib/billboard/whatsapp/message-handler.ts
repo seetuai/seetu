@@ -22,6 +22,12 @@ import { getBillboardPricing, calculatePrice, formatPriceCFA } from '../pricing'
 import { getContentQueuePositions } from '../queue-manager';
 import { uploadBuffer, BUCKETS } from '../../storage';
 import { createBillboardPayment } from '../payments';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+// Initialize Gemini for natural language understanding
+const genAI = process.env.GOOGLE_AI_API_KEY
+  ? new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY)
+  : null;
 
 interface HandlerResult {
   success: boolean;
@@ -323,6 +329,105 @@ async function handleMediaState(
 }
 
 /**
+ * Parse billboard selection using LLM (natural language understanding)
+ */
+async function parseBillboardSelectionWithLLM(
+  userMessage: string,
+  billboards: Array<{ id: string; name: string; address: string; pricePerSlot: number }>
+): Promise<string[]> {
+  if (!genAI) {
+    console.warn('[WA_HANDLER] Gemini not configured, falling back to simple matching');
+    return simpleBillboardMatch(userMessage, billboards);
+  }
+
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.0-flash',
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 500,
+      responseMimeType: 'application/json',
+    },
+  });
+
+  const billboardList = billboards.map((b, i) => `${i + 1}. "${b.name}" (${b.address})`).join('\n');
+
+  const prompt = `Tu es un assistant qui aide à sélectionner des panneaux publicitaires.
+
+PANNEAUX DISPONIBLES:
+${billboardList}
+
+MESSAGE DU CLIENT: "${userMessage}"
+
+TÂCHE: Identifie quels panneaux le client veut sélectionner. Le client peut:
+- Nommer directement: "Sea Plaza", "le panneau de la corniche"
+- Dire "tous", "all", "tous les panneaux"
+- Donner des numéros: "1", "le premier", "1 et 3"
+- Utiliser des mots-clés: partie du nom, quartier, etc.
+
+Retourne un JSON avec les IDs des panneaux sélectionnés:
+{"selected_ids": ["id1", "id2"], "understood": true, "clarification": null}
+
+Si tu ne comprends pas ou si aucun panneau ne correspond:
+{"selected_ids": [], "understood": false, "clarification": "Message de clarification en français"}
+
+PANNEAUX AVEC IDS:
+${billboards.map(b => `- id: "${b.id}", name: "${b.name}"`).join('\n')}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const parsed = JSON.parse(text);
+
+    console.log('[WA_HANDLER] LLM billboard selection:', parsed);
+
+    if (parsed.understood && parsed.selected_ids?.length > 0) {
+      return parsed.selected_ids;
+    }
+    return [];
+  } catch (error) {
+    console.error('[WA_HANDLER] LLM parsing error:', error);
+    return simpleBillboardMatch(userMessage, billboards);
+  }
+}
+
+/**
+ * Simple fallback billboard matching (without LLM)
+ */
+function simpleBillboardMatch(
+  userMessage: string,
+  billboards: Array<{ id: string; name: string; address: string }>
+): string[] {
+  const msg = userMessage.toLowerCase().trim();
+
+  // Check for "all" / "tous"
+  if (msg === 'tous' || msg === 'all' || msg.includes('tous les panneaux')) {
+    return billboards.map(b => b.id);
+  }
+
+  // Check for number references
+  const numberMatch = msg.match(/\d+/g);
+  if (numberMatch) {
+    const indices = numberMatch.map(n => parseInt(n) - 1);
+    return indices
+      .filter(i => i >= 0 && i < billboards.length)
+      .map(i => billboards[i].id);
+  }
+
+  // Try to match by name
+  const matches: string[] = [];
+  for (const b of billboards) {
+    const nameLower = b.name.toLowerCase();
+    const addressLower = b.address.toLowerCase();
+    if (nameLower.includes(msg) || msg.includes(nameLower) ||
+        addressLower.includes(msg) || msg.includes(addressLower)) {
+      matches.push(b.id);
+    }
+  }
+
+  return matches;
+}
+
+/**
  * Handle billboard selection state
  */
 async function handleBillboardSelection(
@@ -331,48 +436,40 @@ async function handleBillboardSelection(
 ): Promise<HandlerResult> {
   const wati = getWatiClient();
 
-  // Parse billboard selection (comma-separated numbers)
+  // Need text input for selection
   if (message.type !== 'text' && message.type !== 'list_reply') {
     await sendBillboardList(message.phone);
     return { success: true };
   }
 
-  // Get selection from message
-  let selectedIndices: number[] = [];
+  // Get user's selection text
+  const userSelection = message.type === 'list_reply' && message.listTitle
+    ? message.listTitle
+    : message.text || '';
 
-  if (message.type === 'list_reply' && message.listId) {
-    selectedIndices = [parseInt(message.listId)];
-  } else if (message.text) {
-    // Parse comma-separated numbers
-    const matches = message.text.match(/\d+/g);
-    if (matches) {
-      selectedIndices = matches.map(m => parseInt(m));
-    }
-  }
-
-  if (selectedIndices.length === 0) {
-    await wati.sendMessage({
-      phone: message.phone,
-      message: templates.BILLBOARD_INVALID_SELECTION,
-    });
+  if (!userSelection.trim()) {
+    await sendBillboardList(message.phone);
     return { success: true };
   }
 
-  // Get billboards and validate selection
+  // Get available billboards
   const billboards = await prisma.billboard.findMany({
     where: { isActive: true },
     orderBy: { name: 'asc' },
-    select: { id: true, name: true, pricePerSlot: true },
+    select: { id: true, name: true, address: true, pricePerSlot: true },
   });
 
-  const selectedBillboards = selectedIndices
-    .filter(i => i >= 1 && i <= billboards.length)
-    .map(i => billboards[i - 1]);
+  // Use LLM to parse natural language selection
+  console.log('[WA_HANDLER] Parsing billboard selection:', userSelection);
+  const selectedIds = await parseBillboardSelectionWithLLM(userSelection, billboards);
+
+  const selectedBillboards = billboards.filter(b => selectedIds.includes(b.id));
 
   if (selectedBillboards.length === 0) {
+    // Didn't understand, ask for clarification
     await wati.sendMessage({
       phone: message.phone,
-      message: templates.BILLBOARD_INVALID_SELECTION,
+      message: `Je n'ai pas trouvé de panneau correspondant à "${userSelection}".\n\nVoici les panneaux disponibles:\n${billboards.map((b, i) => `• ${b.name}`).join('\n')}\n\nQuel panneau souhaitez-vous?`,
     });
     return { success: true };
   }

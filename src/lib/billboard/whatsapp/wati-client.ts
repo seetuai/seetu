@@ -347,26 +347,34 @@ class WatiClient {
         message.text = typeof textObj === 'string' ? textObj : textObj?.body || '';
       } else if (messageType === 'image' || body.image) {
         message.type = 'image';
-        // WATI image can be in body.image or body.media
-        const media = (body.image || body.media) as Record<string, string>;
-        // URL can be in different fields: url, link, data, or nested in media object
-        message.mediaUrl = media?.url || media?.link || media?.data ||
-                           (body.data as Record<string, string>)?.url ||
-                           body.mediaUrl as string;
+        // WATI puts the image URL directly in body.data as a string
+        // Format: "https://live-mt-server.wati.io/384776/api/file/showFile?fileName=..."
+        if (typeof body.data === 'string' && body.data.includes('showFile')) {
+          message.mediaUrl = body.data;
+        } else {
+          const media = (body.image || body.media) as Record<string, string>;
+          message.mediaUrl = media?.url || media?.link || media?.data || body.mediaUrl as string;
+        }
         console.log('[WATI] Extracted image URL:', message.mediaUrl);
       } else if (messageType === 'video' || body.video) {
         message.type = 'video';
-        const media = (body.video || body.media) as Record<string, string>;
-        message.mediaUrl = media?.url || media?.link || media?.data ||
-                           (body.data as Record<string, string>)?.url ||
-                           body.mediaUrl as string;
+        // WATI puts the video URL directly in body.data as a string
+        if (typeof body.data === 'string' && body.data.includes('showFile')) {
+          message.mediaUrl = body.data;
+        } else {
+          const media = (body.video || body.media) as Record<string, string>;
+          message.mediaUrl = media?.url || media?.link || media?.data || body.mediaUrl as string;
+        }
         console.log('[WATI] Extracted video URL:', message.mediaUrl);
       } else if (messageType === 'document' || body.document) {
         message.type = 'document';
-        const media = (body.document || body.media) as Record<string, string>;
-        message.mediaUrl = media?.url || media?.link || media?.data ||
-                           (body.data as Record<string, string>)?.url ||
-                           body.mediaUrl as string;
+        // WATI puts the document URL directly in body.data as a string
+        if (typeof body.data === 'string' && body.data.includes('showFile')) {
+          message.mediaUrl = body.data;
+        } else {
+          const media = (body.document || body.media) as Record<string, string>;
+          message.mediaUrl = media?.url || media?.link || media?.data || body.mediaUrl as string;
+        }
       } else if (messageType === 'button' || body.button) {
         message.type = 'button_reply';
         const button = body.button as Record<string, string>;

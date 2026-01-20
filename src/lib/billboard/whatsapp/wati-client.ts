@@ -139,15 +139,34 @@ class WatiClient {
    */
   async sendMessage(params: SendMessageParams): Promise<{ success: boolean; messageId?: string }> {
     try {
-      // WATI API requires phone number in URL path
-      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendSessionMessage/${params.phone}`, {
+      // WATI API uses form-data format for sendSessionMessage
+      const formData = new URLSearchParams();
+      formData.append('messageText', params.message);
+
+      const url = `${this.config.apiUrl}/api/v1/sendSessionMessage/${params.phone}`;
+      console.log('[WATI] Sending message to:', params.phone);
+
+      const response = await fetch(url, {
         method: 'POST',
-        body: JSON.stringify({
-          messageText: params.message,
-        }),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Bearer ${this.config.apiToken}`,
+        },
+        body: formData.toString(),
       });
 
-      return { success: result.result, messageId: result.info };
+      const result = await response.json();
+      console.log('[WATI] Send message response:', response.status, result);
+
+      if (!response.ok) {
+        throw new WatiError(
+          result.message || `WATI API error: ${response.status}`,
+          response.status,
+          result
+        );
+      }
+
+      return { success: result.result !== false, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send message error:', error);
       return { success: false };
@@ -258,17 +277,14 @@ class WatiClient {
 
   /**
    * Get contact info
+   * Note: WATI /api/v1/getContacts is for listing all contacts, not by phone
+   * Contact info is optional - we proceed without it if unavailable
    */
   async getContact(phone: string): Promise<WatiContact | null> {
-    try {
-      const result = await this.request<{ result: boolean; contact_info?: WatiContact }>(
-        `/api/v1/getContacts/${phone}`
-      );
-      return result.contact_info || null;
-    } catch (error) {
-      console.error('[WATI] Get contact error:', error);
-      return null;
-    }
+    // WATI doesn't have a direct "get contact by phone" endpoint
+    // The contact info is nice-to-have but not required for the flow
+    // Return null to proceed without contact details
+    return null;
   }
 
   /**

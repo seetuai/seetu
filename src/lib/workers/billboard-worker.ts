@@ -326,9 +326,9 @@ export function startBillboardWorkers(): void {
     console.log('[BILLBOARD_WORKER] All workers started with Redis');
   } else {
     // Register in-memory processors for development
-    registerMemoryProcessor(BILLBOARD_QUEUES.VALIDATION, processValidation);
-    registerMemoryProcessor(BILLBOARD_QUEUES.MODERATION, processModeration);
-    registerMemoryProcessor(BILLBOARD_QUEUES.TRANSCODING, processTranscoding);
+    registerMemoryProcessor(BILLBOARD_QUEUES.VALIDATION, (job) => processValidation(job as ValidationJobData));
+    registerMemoryProcessor(BILLBOARD_QUEUES.MODERATION, (job) => processModeration(job as ModerationJobData));
+    registerMemoryProcessor(BILLBOARD_QUEUES.TRANSCODING, (job) => processTranscoding(job as TranscodingJobData));
     console.log('[BILLBOARD_WORKER] Workers started with in-memory queue');
   }
 }

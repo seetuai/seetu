@@ -46,7 +46,7 @@ async function processValidation(
         data: {
           status: 'rejected',
           rejectionReason: result.errors.join('; '),
-          mediaMetadata: result.metadata || undefined,
+          mediaMetadata: result.metadata ? JSON.parse(JSON.stringify(result.metadata)) : undefined,
         },
       });
       console.log(`[BILLBOARD_WORKER] Content rejected: ${result.errors.join('; ')}`);

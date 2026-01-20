@@ -35,6 +35,12 @@ EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
 
+DO $$ BEGIN
+  CREATE TYPE "PaymentMethod" AS ENUM ('wave', 'orange_money', 'visa', 'free_trial', 'bonus');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
 -- ═══════════════════════════════════════════════════════════════
 -- BILLBOARDS TABLE
 -- ═══════════════════════════════════════════════════════════════
@@ -61,15 +67,13 @@ CREATE TABLE IF NOT EXISTS billboards (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_billboards_status_active ON billboards(status, is_active);
-
 -- ═══════════════════════════════════════════════════════════════
 -- BILLBOARD CONTENT TABLE
 -- ═══════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS billboard_content (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id),
+  user_id UUID,
   whatsapp_phone TEXT,
   whatsapp_name TEXT,
   media_type TEXT NOT NULL,
@@ -83,10 +87,6 @@ CREATE TABLE IF NOT EXISTS billboard_content (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-CREATE INDEX IF NOT EXISTS idx_billboard_content_user ON billboard_content(user_id);
-CREATE INDEX IF NOT EXISTS idx_billboard_content_status ON billboard_content(status);
-CREATE INDEX IF NOT EXISTS idx_billboard_content_whatsapp ON billboard_content(whatsapp_phone);
 
 -- ═══════════════════════════════════════════════════════════════
 -- BILLBOARD QUEUE TABLE
@@ -106,9 +106,6 @@ CREATE TABLE IF NOT EXISTS billboard_queue (
   UNIQUE(billboard_id, position)
 );
 
-CREATE INDEX IF NOT EXISTS idx_billboard_queue_billboard_status ON billboard_queue(billboard_id, status);
-CREATE INDEX IF NOT EXISTS idx_billboard_queue_content ON billboard_queue(content_id);
-
 -- ═══════════════════════════════════════════════════════════════
 -- BILLBOARD PAYMENTS TABLE
 -- ═══════════════════════════════════════════════════════════════
@@ -116,7 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_billboard_queue_content ON billboard_queue(conten
 CREATE TABLE IF NOT EXISTS billboard_payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   content_id UUID UNIQUE NOT NULL REFERENCES billboard_content(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES users(id),
+  user_id UUID,
   whatsapp_phone TEXT,
   billboard_ids TEXT[] NOT NULL,
   amount_cfa INTEGER NOT NULL,
@@ -127,10 +124,6 @@ CREATE TABLE IF NOT EXISTS billboard_payments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   paid_at TIMESTAMPTZ
 );
-
-CREATE INDEX IF NOT EXISTS idx_billboard_payments_user ON billboard_payments(user_id);
-CREATE INDEX IF NOT EXISTS idx_billboard_payments_whatsapp ON billboard_payments(whatsapp_phone);
-CREATE INDEX IF NOT EXISTS idx_billboard_payments_status ON billboard_payments(status);
 
 -- ═══════════════════════════════════════════════════════════════
 -- WHATSAPP SESSIONS TABLE
@@ -147,9 +140,6 @@ CREATE TABLE IF NOT EXISTS whatsapp_sessions (
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_state ON whatsapp_sessions(state);
-CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_expires ON whatsapp_sessions(expires_at);
 
 -- ═══════════════════════════════════════════════════════════════
 -- SEED TEST BILLBOARD (50 CFA for testing)

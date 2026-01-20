@@ -62,7 +62,7 @@ async function processValidation(
         durationSeconds: result.metadata?.duration
           ? Math.round(result.metadata.duration)
           : null,
-        mediaMetadata: result.metadata || undefined,
+        mediaMetadata: result.metadata ? JSON.parse(JSON.stringify(result.metadata)) : undefined,
       },
     });
 

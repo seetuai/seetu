@@ -2,11 +2,11 @@
  * Billboard Payments
  *
  * Handles payment creation and processing for billboard ads
- * Integrates with NabooPay for Wave, Orange Money, and Visa payments
+ * Integrates with Wave API for mobile money payments
  */
 
 import { prisma } from '../prisma';
-import { getNabooPayClient, Wallet } from '../naboopay';
+import { getWaveClient } from '../wave';
 import { BillboardPaymentStatus, PaymentMethod } from '@prisma/client';
 import { addToQueue } from './queue-manager';
 import { enqueueTranscoding } from '../queues/billboard-queue';
@@ -59,44 +59,35 @@ export async function createBillboardPayment(
   });
 
   try {
-    // Create NabooPay transaction
-    const nabooPay = getNabooPayClient();
+    // Create Wave checkout session
+    const wave = getWaveClient();
+
+    if (!wave.isConfigured()) {
+      throw new Error('Wave API not configured');
+    }
 
     const successUrl = `${BASE_URL}/api/v1/webhooks/billboard-payment?status=success&payment_id=${payment.id}`;
     const errorUrl = `${BASE_URL}/api/v1/webhooks/billboard-payment?status=error&payment_id=${payment.id}`;
-    const callbackUrl = `${BASE_URL}/api/v1/webhooks/billboard-payment`;
 
-    const transaction = await nabooPay.transaction.create({
-      method_of_payment: [Wallet.WAVE, Wallet.ORANGE_MONEY, Wallet.VISA],
-      products: [
-        {
-          name: `Publicité Billboard - ${billboardIds.length} panneau(x)`,
-          price: amountCfa,
-          quantity: 1,
-        },
-      ],
-      success_url: successUrl,
-      error_url: errorUrl,
-      callback_url: callbackUrl,
-      metadata: {
-        payment_id: payment.id,
-        content_id: contentId,
-        type: 'billboard',
-      },
+    const session = await wave.createCheckoutSession({
+      amountCfa,
+      clientReference: payment.id,
+      successUrl,
+      errorUrl,
     });
 
     // Update payment with checkout URL and external ref
     await prisma.billboardPayment.update({
       where: { id: payment.id },
       data: {
-        checkoutUrl: transaction.checkout_url,
-        externalRef: transaction.order_id,
+        checkoutUrl: session.wave_launch_url,
+        externalRef: session.id,
       },
     });
 
     return {
       id: payment.id,
-      checkoutUrl: transaction.checkout_url,
+      checkoutUrl: session.wave_launch_url,
       status: 'pending',
     };
   } catch (error) {

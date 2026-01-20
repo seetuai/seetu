@@ -110,9 +110,7 @@ export const formatPriceSummary = (
   return message;
 };
 
-export const PAYMENT_PROMPT = `Pour finaliser votre commande, cliquez sur le lien de paiement ci-dessous.
-
-Modes de paiement acceptés: Wave, Orange Money, Visa`;
+export const PAYMENT_PROMPT = `Pour finaliser votre commande, cliquez sur le lien ci-dessous pour payer avec Wave.`;
 
 export const formatPaymentLink = (checkoutUrl: string) =>
   `Payez ici: ${checkoutUrl}`;

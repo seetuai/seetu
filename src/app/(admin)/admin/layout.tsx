@@ -13,6 +13,7 @@ import {
   DollarSign,
   MapPin,
   User,
+  Monitor,
 } from 'lucide-react';
 
 // Get superadmin emails from env
@@ -104,6 +105,13 @@ export default async function AdminLayout({
             >
               <DollarSign className="h-5 w-5" />
               Paiements
+            </Link>
+            <Link
+              href="/admin/billboards/operations"
+              className="flex items-center gap-3 px-4 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <Monitor className="h-5 w-5" />
+              Billboard Ops
             </Link>
             <Link
               href="/admin/settings"

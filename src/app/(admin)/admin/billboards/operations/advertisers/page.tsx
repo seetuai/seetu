@@ -1,10 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import useSWR from 'swr';
-import { Users, Search, Plus, MessageCircle, Globe, Star, TrendingUp } from 'lucide-react';
-
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+import { Plus, Search, MessageCircle, Globe, Star } from 'lucide-react';
 
 interface Advertiser {
   id: string;
@@ -37,59 +34,59 @@ export default function AdvertisersPage() {
   );
 
   const statusStyles = {
-    vip: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-    active: 'bg-green-500/10 text-green-500 border-green-500/20',
-    suspended: 'bg-red-500/10 text-red-500 border-red-500/20',
+    vip: 'bg-purple-100 text-purple-600 border-purple-200',
+    active: 'bg-green-100 text-green-600 border-green-200',
+    suspended: 'bg-red-100 text-red-600 border-red-200',
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-end justify-between">
         <div>
-          <h2 className="text-3xl font-black tracking-tight">Advertiser CRM</h2>
-          <p className="text-[#9da6b9] mt-1">Manage platform users and WhatsApp customers</p>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Advertiser CRM</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Manage platform users and WhatsApp customers</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-[#135bec] text-white rounded-lg font-bold hover:bg-[#135bec]/90 transition-colors">
+        <button className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors">
           <Plus className="h-4 w-4" /> Add Advertiser
         </button>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="bg-[#1c222d] border border-[#282e39] p-4 rounded-xl">
-          <p className="text-2xl font-black">{advertisers.length}</p>
-          <p className="text-sm text-[#9da6b9]">Total Advertisers</p>
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-lg">
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">{advertisers.length}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Total Advertisers</p>
         </div>
-        <div className="bg-[#1c222d] border border-[#282e39] p-4 rounded-xl">
-          <p className="text-2xl font-black">{(advertisers.reduce((s, a) => s + a.totalSpent, 0) / 1000000).toFixed(1)}M</p>
-          <p className="text-sm text-[#9da6b9]">Total Revenue (FCFA)</p>
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-lg">
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">{(advertisers.reduce((s, a) => s + a.totalSpent, 0) / 1000000).toFixed(1)}M</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Total Revenue (FCFA)</p>
         </div>
-        <div className="bg-[#1c222d] border border-[#282e39] p-4 rounded-xl">
-          <p className="text-2xl font-black">{advertisers.reduce((s, a) => s + a.campaigns, 0)}</p>
-          <p className="text-sm text-[#9da6b9]">Total Campaigns</p>
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-lg">
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">{advertisers.reduce((s, a) => s + a.campaigns, 0)}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Total Campaigns</p>
         </div>
-        <div className="bg-[#1c222d] border border-[#282e39] p-4 rounded-xl">
-          <p className="text-2xl font-black">{advertisers.filter((a) => a.type === 'whatsapp').length}</p>
-          <p className="text-sm text-[#9da6b9]">WhatsApp Leads</p>
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-lg">
+          <p className="text-2xl font-bold text-slate-900 dark:text-white">{advertisers.filter((a) => a.type === 'whatsapp').length}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">WhatsApp Leads</p>
         </div>
       </div>
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9da6b9]" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
         <input
           type="text"
           placeholder="Search advertisers..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-[#1c222d] border border-[#282e39] rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-[#135bec]/50 focus:outline-none"
+          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-red-500/50 focus:outline-none"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-[#1c222d] border border-[#282e39] rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
         <table className="w-full text-left text-sm">
-          <thead className="bg-[#101622] text-[#9da6b9] uppercase text-xs font-bold">
+          <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase text-xs font-bold">
             <tr>
               <th className="px-6 py-4">Advertiser</th>
               <th className="px-6 py-4">Type</th>
@@ -99,41 +96,41 @@ export default function AdvertisersPage() {
               <th className="px-6 py-4">Last Activity</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#282e39]">
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
             {filtered.map((advertiser) => (
               <tr
                 key={advertiser.id}
                 onClick={() => setSelected(advertiser.id)}
-                className={`hover:bg-[#282e39]/30 transition-colors cursor-pointer ${selected === advertiser.id ? 'bg-[#135bec]/10' : ''}`}
+                className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer ${selected === advertiser.id ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
               >
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="size-10 rounded-full bg-[#135bec]/20 flex items-center justify-center text-[#135bec] font-bold">
+                    <div className="size-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-bold">
                       {advertiser.name.charAt(0)}
                     </div>
                     <div>
-                      <p className="font-bold flex items-center gap-2">
+                      <p className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                         {advertiser.name}
-                        {advertiser.status === 'vip' && <Star className="h-3 w-3 text-purple-400 fill-purple-400" />}
+                        {advertiser.status === 'vip' && <Star className="h-3 w-3 text-purple-500 fill-purple-500" />}
                       </p>
-                      <p className="text-xs text-[#9da6b9]">{advertiser.email || advertiser.phone}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{advertiser.email || advertiser.phone}</p>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`flex items-center gap-1.5 text-xs font-bold ${advertiser.type === 'platform' ? 'text-[#135bec]' : 'text-green-500'}`}>
+                  <span className={`flex items-center gap-1.5 text-xs font-bold ${advertiser.type === 'platform' ? 'text-red-600' : 'text-green-600'}`}>
                     {advertiser.type === 'platform' ? <Globe className="h-3 w-3" /> : <MessageCircle className="h-3 w-3" />}
                     {advertiser.type === 'platform' ? 'Platform' : 'WhatsApp'}
                   </span>
                 </td>
-                <td className="px-6 py-4 font-bold">{advertiser.totalSpent.toLocaleString()} FCFA</td>
-                <td className="px-6 py-4">{advertiser.campaigns}</td>
+                <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{advertiser.totalSpent.toLocaleString()} FCFA</td>
+                <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{advertiser.campaigns}</td>
                 <td className="px-6 py-4">
                   <span className={`px-2 py-1 rounded text-xs font-bold border ${statusStyles[advertiser.status]}`}>
                     {advertiser.status.toUpperCase()}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-[#9da6b9]">{advertiser.lastActivity}</td>
+                <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{advertiser.lastActivity}</td>
               </tr>
             ))}
           </tbody>

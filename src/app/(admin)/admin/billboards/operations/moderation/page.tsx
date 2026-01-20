@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Shield, Play, CheckCircle, XCircle, AlertTriangle, Eye } from 'lucide-react';
+import { Shield, Play, CheckCircle, XCircle } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -30,37 +30,37 @@ export default function ModerationPage() {
   const selectedItem = items.find((i: ModerationItem) => i.id === selected) || items[0];
 
   const riskConfig = {
-    low: { color: 'text-green-500', bg: 'bg-green-500/10', border: 'border-green-500/20' },
-    medium: { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-    high: { color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/20' },
+    low: { color: 'text-green-600', bg: 'bg-green-100', border: 'border-green-200' },
+    medium: { color: 'text-amber-600', bg: 'bg-amber-100', border: 'border-amber-200' },
+    high: { color: 'text-red-600', bg: 'bg-red-100', border: 'border-red-200' },
   };
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex">
+    <div className="grid grid-cols-12 gap-6">
       {/* Queue List */}
-      <aside className="w-80 border-r border-[#282e39] flex flex-col bg-[#101622]">
-        <div className="p-4 border-b border-[#282e39]">
-          <h3 className="font-bold flex items-center gap-2">
-            <Shield className="h-5 w-5 text-[#135bec]" />
-            Moderation Queue ({items.length})
+      <div className="col-span-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+          <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Shield className="h-5 w-5 text-red-600" />
+            Queue ({items.length})
           </h3>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="max-h-[500px] overflow-y-auto">
           {items.map((item: ModerationItem) => {
             const config = riskConfig[item.riskLevel];
             return (
               <div
                 key={item.id}
                 onClick={() => setSelected(item.id)}
-                className={`p-4 border-b border-[#282e39] cursor-pointer transition-colors ${
-                  selectedItem?.id === item.id ? 'bg-[#135bec]/10 border-l-2 border-l-[#135bec]' : 'hover:bg-[#1c222d]'
+                className={`p-4 border-b border-slate-200 dark:border-slate-700 cursor-pointer transition-colors ${
+                  selectedItem?.id === item.id ? 'bg-red-50 dark:bg-red-900/20 border-l-2 border-l-red-600' : 'hover:bg-slate-100 dark:hover:bg-slate-700'
                 }`}
               >
                 <div className="flex gap-3">
-                  <div className="size-16 bg-[#282e39] rounded shrink-0" />
+                  <div className="size-12 bg-slate-200 dark:bg-slate-700 rounded shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{item.advertiser}</p>
-                    <p className="text-xs text-[#9da6b9]">{item.submittedAt}</p>
+                    <p className="font-medium text-sm text-slate-900 dark:text-white truncate">{item.advertiser}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{item.submittedAt}</p>
                     <span className={`inline-block mt-1 text-xs font-bold px-2 py-0.5 rounded ${config.bg} ${config.color}`}>
                       {item.riskLevel.toUpperCase()}
                     </span>
@@ -70,34 +70,34 @@ export default function ModerationPage() {
             );
           })}
         </div>
-      </aside>
+      </div>
 
       {/* Preview Panel */}
-      <main className="flex-1 flex flex-col bg-[#101622]">
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="w-full max-w-2xl aspect-video bg-black rounded-xl flex items-center justify-center">
+      <div className="col-span-6 space-y-4">
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-6">
+          <div className="aspect-video bg-slate-900 rounded-lg flex items-center justify-center mb-4">
             <Play className="h-16 w-16 text-white/30" />
           </div>
+          <div className="flex gap-3">
+            <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors">
+              <CheckCircle className="h-5 w-5" /> Approve
+            </button>
+            <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-colors">
+              <XCircle className="h-5 w-5" /> Reject
+            </button>
+          </div>
         </div>
-        <div className="p-6 border-t border-[#282e39] flex gap-4">
-          <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors">
-            <CheckCircle className="h-5 w-5" /> Approve
-          </button>
-          <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-colors">
-            <XCircle className="h-5 w-5" /> Reject
-          </button>
-        </div>
-      </main>
+      </div>
 
       {/* AI Analysis Panel */}
-      <aside className="w-80 border-l border-[#282e39] flex flex-col bg-[#101622] p-6">
-        <h3 className="font-bold mb-6">AI Analysis</h3>
+      <div className="col-span-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-6">
+        <h3 className="font-bold text-slate-900 dark:text-white mb-6">AI Analysis</h3>
         {selectedItem && (
           <div className="space-y-4">
-            <div className="p-4 bg-[#1c222d] rounded-lg">
-              <p className="text-xs text-[#9da6b9] mb-2">Overall Safety Score</p>
-              <p className="text-3xl font-black">{selectedItem.aiAnalysis.overall}%</p>
-              <div className="w-full bg-[#282e39] h-2 rounded-full mt-2 overflow-hidden">
+            <div className="p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">Overall Safety Score</p>
+              <p className="text-3xl font-black text-slate-900 dark:text-white">{selectedItem.aiAnalysis.overall}%</p>
+              <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full mt-2 overflow-hidden">
                 <div
                   className={`h-full rounded-full ${selectedItem.aiAnalysis.overall > 70 ? 'bg-green-500' : selectedItem.aiAnalysis.overall > 40 ? 'bg-amber-500' : 'bg-red-500'}`}
                   style={{ width: `${selectedItem.aiAnalysis.overall}%` }}
@@ -106,7 +106,7 @@ export default function ModerationPage() {
             </div>
             {['nudity', 'violence', 'political'].map((key) => (
               <div key={key} className="flex justify-between items-center">
-                <span className="text-sm text-[#9da6b9] capitalize">{key}</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400 capitalize">{key}</span>
                 <span className={`font-mono text-sm ${(selectedItem.aiAnalysis as any)[key] > 20 ? 'text-red-500' : 'text-green-500'}`}>
                   {(selectedItem.aiAnalysis as any)[key]}%
                 </span>
@@ -114,7 +114,7 @@ export default function ModerationPage() {
             ))}
           </div>
         )}
-      </aside>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Bell, AlertTriangle, AlertCircle, Info, CheckCircle, Download } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, CheckCircle, Download } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -40,31 +40,31 @@ export default function AlertsPage() {
   };
 
   const typeConfig = {
-    critical: { color: 'border-red-500/20', stripe: 'bg-red-500', iconBg: 'bg-red-500/10 text-red-500', icon: AlertCircle },
-    warning: { color: 'border-amber-500/20', stripe: 'bg-amber-500', iconBg: 'bg-amber-500/10 text-amber-500', icon: AlertTriangle },
-    info: { color: 'border-[#135bec]/20', stripe: 'bg-[#135bec]', iconBg: 'bg-[#135bec]/10 text-[#135bec]', icon: Info },
-    resolved: { color: 'border-[#282e39]', stripe: 'bg-[#282e39]', iconBg: 'bg-[#282e39] text-[#9da6b9]', icon: CheckCircle },
+    critical: { color: 'border-red-200', stripe: 'bg-red-500', iconBg: 'bg-red-100 text-red-600', icon: AlertCircle },
+    warning: { color: 'border-amber-200', stripe: 'bg-amber-500', iconBg: 'bg-amber-100 text-amber-600', icon: AlertTriangle },
+    info: { color: 'border-blue-200', stripe: 'bg-blue-500', iconBg: 'bg-blue-100 text-blue-600', icon: Info },
+    resolved: { color: 'border-slate-200', stripe: 'bg-slate-400', iconBg: 'bg-slate-100 text-slate-500', icon: CheckCircle },
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6">
       <div className="flex items-end justify-between">
         <div>
-          <h2 className="text-3xl font-black tracking-tight">Alert Center</h2>
-          <p className="text-[#9da6b9] mt-1">Real-time monitoring and system status</p>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Alert Center</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Real-time monitoring and system status</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#282e39] rounded-lg text-sm font-medium hover:bg-[#3b4453] transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
             <Download className="h-4 w-4" /> Export Logs
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#135bec] text-white rounded-lg font-bold hover:bg-[#135bec]/90 transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors">
             Mark all as read
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-[#282e39]">
+      <div className="border-b border-slate-200 dark:border-slate-700">
         <nav className="flex gap-8">
           {[
             { id: 'all', label: 'All Alerts', count: stats.total },
@@ -76,11 +76,11 @@ export default function AlertsPage() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`pb-4 pt-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === tab.id ? 'border-[#135bec] text-[#135bec]' : 'border-transparent text-[#9da6b9] hover:text-white'
+                activeTab === tab.id ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               {tab.label}
-              {activeTab === tab.id && <span className="bg-[#135bec]/10 px-2 py-0.5 rounded text-[10px]">{tab.count}</span>}
+              {activeTab === tab.id && <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-[10px]">{tab.count}</span>}
             </button>
           ))}
         </nav>
@@ -94,34 +94,34 @@ export default function AlertsPage() {
           return (
             <div
               key={alert.id}
-              className={`flex items-center gap-4 bg-[#1c222d] p-4 rounded-xl border ${config.color} relative overflow-hidden ${alert.read ? 'opacity-60' : ''}`}
+              className={`flex items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-lg border ${config.color} relative overflow-hidden ${alert.read ? 'opacity-60' : ''}`}
             >
               <div className={`absolute left-0 top-0 bottom-0 w-1 ${config.stripe}`} />
-              <div className="flex items-center h-full">
+              <div className="flex items-center h-full ml-2">
                 <input
                   type="checkbox"
                   checked={selectedAlerts.includes(alert.id)}
                   onChange={() => toggleSelect(alert.id)}
-                  className="rounded border-[#282e39] text-[#135bec] focus:ring-[#135bec] bg-transparent size-5 cursor-pointer"
+                  className="rounded border-slate-300 text-red-600 focus:ring-red-500 bg-transparent size-5 cursor-pointer"
                 />
               </div>
               <div className={`size-12 rounded-lg flex items-center justify-center shrink-0 ${config.iconBg}`}>
                 <Icon className="h-6 w-6" />
               </div>
               <div className="flex-1 space-y-0.5">
-                <h4 className={`text-base font-bold ${alert.read ? 'text-[#9da6b9]' : 'text-white'}`}>{alert.title}</h4>
-                <p className="text-xs text-[#9da6b9]">{alert.timestamp} {alert.billboardId && `• ID: ${alert.billboardId}`}</p>
-                <p className="text-sm text-[#9da6b9] mt-1">{alert.description}</p>
+                <h4 className={`text-base font-bold ${alert.read ? 'text-slate-500' : 'text-slate-900 dark:text-white'}`}>{alert.title}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{alert.timestamp} {alert.billboardId && `• ID: ${alert.billboardId}`}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{alert.description}</p>
               </div>
               <div className="shrink-0">
                 {alert.type !== 'resolved' ? (
                   <button className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
-                    alert.type === 'critical' ? 'bg-[#135bec] text-white hover:bg-[#135bec]/90' : 'bg-[#282e39] text-white hover:bg-[#3b4453]'
+                    alert.type === 'critical' ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-600'
                   }`}>
                     View Issue
                   </button>
                 ) : (
-                  <button className="text-[#9da6b9] text-sm font-bold hover:underline">Details</button>
+                  <button className="text-slate-500 text-sm font-bold hover:underline">Details</button>
                 )}
               </div>
             </div>
@@ -130,12 +130,12 @@ export default function AlertsPage() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between pt-4 text-sm text-[#9da6b9]">
+      <div className="flex items-center justify-between pt-4 text-sm text-slate-500 dark:text-slate-400">
         <p>Showing {filteredAlerts.length} of {stats.total} alerts</p>
         <div className="flex gap-2">
-          <button className="px-4 py-2 rounded-lg bg-[#1c222d] text-white font-bold">1</button>
-          <button className="px-4 py-2 rounded-lg border border-[#282e39] hover:bg-[#1c222d]">2</button>
-          <button className="px-4 py-2 rounded-lg border border-[#282e39] hover:bg-[#1c222d]">Next</button>
+          <button className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold">1</button>
+          <button className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700">2</button>
+          <button className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700">Next</button>
         </div>
       </div>
     </div>

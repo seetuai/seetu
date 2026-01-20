@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import { uploadBuffer, BUCKETS } from '@/lib/storage';
 import { enqueueValidation } from '@/lib/queues/billboard-queue';
@@ -24,7 +24,7 @@ const ALLOWED_TYPES = [
 export async function POST(request: NextRequest) {
   try {
     // Check auth
-    const supabase = await createServerClient();
+    const supabase = await createServiceClient();
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser();

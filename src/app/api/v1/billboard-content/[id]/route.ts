@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import { removeFromAllQueues } from '@/lib/billboard/queue-manager';
 
@@ -18,7 +18,7 @@ export async function GET(
     const { id } = await params;
 
     // Check auth
-    const supabase = await createServerClient();
+    const supabase = await createServiceClient();
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser();
@@ -124,7 +124,7 @@ export async function DELETE(
     const { id } = await params;
 
     // Check auth
-    const supabase = await createServerClient();
+    const supabase = await createServiceClient();
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser();

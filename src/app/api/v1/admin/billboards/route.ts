@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
@@ -13,7 +13,7 @@ import crypto from 'crypto';
 const SUPERADMIN_EMAILS = ['admin@seetu.sn', 'ali@seetu.sn'];
 
 async function isAdmin(request: NextRequest): Promise<boolean> {
-  const supabase = await createServerClient();
+  const supabase = await createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user?.email) return false;

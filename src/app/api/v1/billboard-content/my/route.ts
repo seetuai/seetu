@@ -5,13 +5,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
     // Check auth
-    const supabase = await createServerClient();
+    const supabase = await createServiceClient();
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser();

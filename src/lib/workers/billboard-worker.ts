@@ -113,12 +113,12 @@ async function processModeration(
     await prisma.billboardContent.update({
       where: { id: contentId },
       data: {
-        moderationResult: {
+        moderationResult: JSON.parse(JSON.stringify({
           approved: result.approved,
           categories: result.categories,
           overallRisk: result.overallRisk,
           reviewRequired: result.reviewRequired,
-        },
+        })),
       },
     });
 

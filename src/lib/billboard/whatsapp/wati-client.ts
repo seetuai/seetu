@@ -139,15 +139,15 @@ class WatiClient {
    */
   async sendMessage(params: SendMessageParams): Promise<{ success: boolean; messageId?: string }> {
     try {
-      const result = await this.request<{ id: string }>('/api/v1/sendSessionMessage', {
+      // WATI API requires phone number in URL path
+      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendSessionMessage/${params.phone}`, {
         method: 'POST',
         body: JSON.stringify({
-          whatsappNumber: params.phone,
-          message: params.message,
+          messageText: params.message,
         }),
       });
 
-      return { success: true, messageId: result.id };
+      return { success: result.result, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send message error:', error);
       return { success: false };
@@ -160,7 +160,6 @@ class WatiClient {
   async sendTemplate(params: SendTemplateParams): Promise<{ success: boolean; messageId?: string }> {
     try {
       const body: Record<string, unknown> = {
-        whatsappNumber: params.phone,
         template_name: params.templateName,
         broadcast_name: `billboard-${Date.now()}`,
       };
@@ -180,12 +179,13 @@ class WatiClient {
         };
       }
 
-      const result = await this.request<{ id: string }>('/api/v1/sendTemplateMessage', {
+      // WATI API requires phone number in URL path
+      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendTemplateMessage/${params.phone}`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
 
-      return { success: true, messageId: result.id };
+      return { success: result.result, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send template error:', error);
       return { success: false };
@@ -197,23 +197,16 @@ class WatiClient {
    */
   async sendMedia(params: SendMediaParams): Promise<{ success: boolean; messageId?: string }> {
     try {
-      const endpoint =
-        params.mediaType === 'image'
-          ? '/api/v1/sendSessionImage'
-          : params.mediaType === 'video'
-          ? '/api/v1/sendSessionVideo'
-          : '/api/v1/sendSessionDocument';
-
-      const result = await this.request<{ id: string }>(endpoint, {
+      // WATI uses sendSessionFile for all media types with phone in URL
+      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendSessionFile/${params.phone}`, {
         method: 'POST',
         body: JSON.stringify({
-          whatsappNumber: params.phone,
           url: params.mediaUrl,
           caption: params.caption,
         }),
       });
 
-      return { success: true, messageId: result.id };
+      return { success: result.result, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send media error:', error);
       return { success: false };
@@ -225,16 +218,16 @@ class WatiClient {
    */
   async sendButtons(params: SendButtonParams): Promise<{ success: boolean; messageId?: string }> {
     try {
-      const result = await this.request<{ id: string }>('/api/v1/sendInteractiveButtonsMessage', {
+      // WATI API requires phone number in URL path
+      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendInteractiveButtonsMessage/${params.phone}`, {
         method: 'POST',
         body: JSON.stringify({
-          whatsappNumber: params.phone,
           body: params.body,
-          buttons: JSON.stringify(params.buttons),
+          buttons: params.buttons,
         }),
       });
 
-      return { success: true, messageId: result.id };
+      return { success: result.result, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send buttons error:', error);
       return { success: false };
@@ -246,17 +239,17 @@ class WatiClient {
    */
   async sendList(params: SendListParams): Promise<{ success: boolean; messageId?: string }> {
     try {
-      const result = await this.request<{ id: string }>('/api/v1/sendInteractiveListMessage', {
+      // WATI API requires phone number in URL path
+      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendInteractiveListMessage/${params.phone}`, {
         method: 'POST',
         body: JSON.stringify({
-          whatsappNumber: params.phone,
           body: params.body,
           buttonText: params.buttonText,
-          sections: JSON.stringify(params.sections),
+          sections: params.sections,
         }),
       });
 
-      return { success: true, messageId: result.id };
+      return { success: result.result, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send list error:', error);
       return { success: false };
@@ -268,10 +261,10 @@ class WatiClient {
    */
   async getContact(phone: string): Promise<WatiContact | null> {
     try {
-      const result = await this.request<{ contact: WatiContact }>(
-        `/api/v1/getContactInfo/${phone}`
+      const result = await this.request<{ result: boolean; contact_info?: WatiContact }>(
+        `/api/v1/getContacts/${phone}`
       );
-      return result.contact;
+      return result.contact_info || null;
     } catch (error) {
       console.error('[WATI] Get contact error:', error);
       return null;

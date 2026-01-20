@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Shield, Play, CheckCircle, XCircle } from 'lucide-react';
+import { Shield, Play, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -18,16 +18,28 @@ interface ModerationItem {
 export default function ModerationPage() {
   const [selected, setSelected] = useState<string | null>(null);
 
-  const { data } = useSWR('/api/v1/admin/billboards/content?status=pending_moderation', fetcher);
+  const { data, isLoading } = useSWR('/api/v1/admin/billboards/content?status=pending_moderation', fetcher);
 
-  const mockItems: ModerationItem[] = [
-    { id: '1', thumbnailUrl: '', advertiser: 'Orange Senegal', submittedAt: '10 mins ago', riskLevel: 'low', aiAnalysis: { nudity: 0, violence: 2, political: 0, overall: 92 } },
-    { id: '2', thumbnailUrl: '', advertiser: 'Local Business', submittedAt: '25 mins ago', riskLevel: 'medium', aiAnalysis: { nudity: 15, violence: 5, political: 0, overall: 68 } },
-    { id: '3', thumbnailUrl: '', advertiser: 'Unknown', submittedAt: '1 hour ago', riskLevel: 'high', aiAnalysis: { nudity: 45, violence: 10, political: 5, overall: 35 } },
-  ];
-
-  const items = data?.content || mockItems;
+  const items: ModerationItem[] = data?.content || [];
   const selectedItem = items.find((i: ModerationItem) => i.id === selected) || items[0];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+        <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">All Caught Up!</h3>
+        <p className="text-slate-500 dark:text-slate-400">No content pending moderation</p>
+      </div>
+    );
+  }
 
   const riskConfig = {
     low: { color: 'text-green-600', bg: 'bg-green-100', border: 'border-green-200' },

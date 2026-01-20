@@ -2,29 +2,34 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Play, Pause, SkipForward, Trash2, GripVertical, Tv, RefreshCw, Plus, AlertCircle, WifiOff } from 'lucide-react';
+import { Play, Pause, SkipForward, Trash2, GripVertical, Tv, RefreshCw, Plus, AlertCircle, WifiOff, Loader2, Monitor } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function QueueControlPage() {
   const [selectedBillboard, setSelectedBillboard] = useState<string | null>(null);
-  const { data: billboards } = useSWR('/api/v1/admin/billboards/queues', fetcher, { refreshInterval: 5000 });
+  const { data: billboardsData, isLoading } = useSWR('/api/v1/admin/billboards/queues', fetcher, { refreshInterval: 5000 });
 
-  const mockBillboards = [
-    {
-      id: '1', name: 'Plateau Centre', slug: 'plateau-centre', status: 'online', address: "Place de l'Indépendance",
-      currentlyPlaying: { id: 'q1', content: { id: 'c1', title: 'Orange 5G Launch', advertiser: 'Orange Senegal', durationSeconds: 15 }, startedAt: new Date().toISOString() },
-      queue: [
-        { id: 'q2', position: 1, content: { title: 'Nike Air Max', advertiser: 'Nike', durationSeconds: 15 }, scheduledFor: '14:32:15' },
-        { id: 'q3', position: 2, content: { title: 'ASPT Tourism', advertiser: 'ASPT', durationSeconds: 30 }, scheduledFor: '14:32:30' },
-      ],
-    },
-    { id: '2', name: 'Almadies', slug: 'almadies', status: 'online', address: 'Route de Ngor', currentlyPlaying: null, queue: [] },
-    { id: '3', name: 'Médina', slug: 'medina', status: 'offline', address: 'Avenue Blaise Diagne', currentlyPlaying: null, queue: [] },
-  ];
-
-  const displayBillboards = billboards?.billboards || mockBillboards;
+  const displayBillboards = billboardsData?.billboards || [];
   const currentBillboard = displayBillboards.find((b: any) => b.id === selectedBillboard) || displayBillboards[0];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  if (displayBillboards.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+        <Monitor className="h-16 w-16 text-slate-400 mb-4" />
+        <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Billboards</h3>
+        <p className="text-slate-500 dark:text-slate-400">Add billboards to manage their queues</p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-12 gap-6">

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Monitor, Wifi, WifiOff, Wrench, Play, LayoutGrid, List } from 'lucide-react';
+import { Wifi, WifiOff, Wrench, Play, LayoutGrid, List, Loader2, Monitor } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -20,18 +20,18 @@ export default function LiveMonitorPage() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [filter, setFilter] = useState<'all' | 'online' | 'offline'>('all');
 
-  const { data } = useSWR('/api/v1/admin/billboards/live', fetcher, { refreshInterval: 5000 });
+  const { data, isLoading } = useSWR('/api/v1/admin/billboards/live', fetcher, { refreshInterval: 5000 });
 
-  const mockBillboards: Billboard[] = [
-    { id: '1', name: 'Plateau Centre', address: "Place de l'Indépendance", status: 'online', currentContent: { title: 'Orange 5G', advertiser: 'Orange Senegal' }, queueCount: 12, playsToday: 156 },
-    { id: '2', name: 'Almadies', address: 'Route de Ngor', status: 'online', currentContent: { title: 'Nike Air Max', advertiser: 'Nike' }, queueCount: 8, playsToday: 134 },
-    { id: '3', name: 'VDN', address: 'Voie de Dégagement Nord', status: 'online', currentContent: { title: 'CBAO Banking', advertiser: 'CBAO' }, queueCount: 15, playsToday: 201 },
-    { id: '4', name: 'Médina', address: 'Avenue Blaise Diagne', status: 'offline', currentContent: null, queueCount: 0, playsToday: 45 },
-    { id: '5', name: 'Parcelles Assainies', address: 'Unité 17', status: 'maintenance', currentContent: null, queueCount: 5, playsToday: 89 },
-  ];
-
-  const billboards = data?.billboards || mockBillboards;
+  const billboards: Billboard[] = data?.billboards || [];
   const filtered = filter === 'all' ? billboards : billboards.filter((b: Billboard) => b.status === filter);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   const statusConfig = {
     online: { icon: Wifi, color: 'text-green-600', bg: 'bg-green-100', label: 'Online' },
@@ -71,6 +71,13 @@ export default function LiveMonitorPage() {
         </div>
       </div>
 
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <Monitor className="h-12 w-12 text-slate-400 mb-4" />
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No Billboards Found</h3>
+          <p className="text-slate-500 dark:text-slate-400">No billboards in the network yet</p>
+        </div>
+      ) : (
       <div className={view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-3'}>
         {filtered.map((billboard: Billboard) => {
           const config = statusConfig[billboard.status];
@@ -112,6 +119,7 @@ export default function LiveMonitorPage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

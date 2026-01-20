@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Search, MessageCircle, Globe, Star } from 'lucide-react';
+import useSWR from 'swr';
+import { Plus, Search, MessageCircle, Globe, Star, Loader2, Users } from 'lucide-react';
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 interface Advertiser {
   id: string;
@@ -19,19 +22,22 @@ export default function AdvertisersPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
 
-  const mockAdvertisers: Advertiser[] = [
-    { id: '1', name: 'Orange Sénégal', email: 'marketing@orange.sn', type: 'platform', totalSpent: 15000000, campaigns: 24, status: 'vip', lastActivity: '2 hours ago' },
-    { id: '2', name: 'CFAO Motors', email: 'pub@cfao.com', type: 'platform', totalSpent: 8500000, campaigns: 12, status: 'active', lastActivity: '1 day ago' },
-    { id: '3', name: 'Mamadou Diallo', phone: '+221 77 123 4567', type: 'whatsapp', totalSpent: 150000, campaigns: 2, status: 'active', lastActivity: '3 days ago' },
-    { id: '4', name: 'Teranga Shop', phone: '+221 70 987 6543', type: 'whatsapp', totalSpent: 75000, campaigns: 1, status: 'suspended', lastActivity: '1 week ago' },
-  ];
+  const { data, isLoading } = useSWR('/api/v1/admin/billboards/advertisers', fetcher);
 
-  const advertisers = mockAdvertisers;
+  const advertisers: Advertiser[] = data?.advertisers || [];
   const filtered = advertisers.filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase()) ||
     a.email?.toLowerCase().includes(search.toLowerCase()) ||
     a.phone?.includes(search)
   );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   const statusStyles = {
     vip: 'bg-purple-100 text-purple-600 border-purple-200',
@@ -84,6 +90,13 @@ export default function AdvertisersPage() {
       </div>
 
       {/* Table */}
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <Users className="h-12 w-12 text-slate-400 mb-4" />
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No Advertisers</h3>
+          <p className="text-slate-500 dark:text-slate-400">No advertisers in the system yet</p>
+        </div>
+      ) : (
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase text-xs font-bold">
@@ -136,6 +149,7 @@ export default function AdvertisersPage() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

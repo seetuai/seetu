@@ -1,34 +1,25 @@
 'use client';
 
 import useSWR from 'swr';
-import { TrendingUp, Download } from 'lucide-react';
+import { TrendingUp, Download, Loader2, DollarSign } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function RevenuePage() {
-  const { data } = useSWR('/api/v1/admin/billboards/revenue', fetcher);
+  const { data, isLoading } = useSWR('/api/v1/admin/billboards/revenue', fetcher);
 
-  const mockStats = { totalRevenue: 45500000, monthlyGrowth: 12.5, activeBillboards: 12 };
-  const mockLocations = [
-    { name: 'VDN', amount: 22100000, percentage: 90 },
-    { name: 'Almadies', amount: 9200000, percentage: 65 },
-    { name: 'Parcelles', amount: 13900000, percentage: 75 },
-  ];
-  const mockPayments = [
-    { name: 'Wave', percentage: 65, color: '#dc2626' },
-    { name: 'Orange Money', percentage: 25, color: '#ff6b00' },
-    { name: 'Bank', percentage: 10, color: '#94a3b8' },
-  ];
-  const mockTransactions = [
-    { id: 'STU-8821', date: 'Jan 15, 2024', advertiser: 'Orange Sénégal', amount: 1250000, status: 'completed' },
-    { id: 'STU-8819', date: 'Jan 14, 2024', advertiser: 'CFAO Motors', amount: 3400000, status: 'completed' },
-    { id: 'STU-8815', date: 'Jan 13, 2024', advertiser: 'Société Générale', amount: 950000, status: 'failed' },
-  ];
+  const stats = data?.stats || { totalRevenue: 0, monthlyGrowth: 0, activeBillboards: 0 };
+  const locations = data?.revenueByLocation || [];
+  const payments = data?.paymentMethods || [];
+  const transactions = data?.transactions || [];
 
-  const stats = data?.stats || mockStats;
-  const locations = data?.revenueByLocation || mockLocations;
-  const payments = data?.paymentMethods || mockPayments;
-  const transactions = data?.transactions || mockTransactions;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   const statusStyles: Record<string, string> = {
     completed: 'bg-green-100 text-green-600',
@@ -70,6 +61,9 @@ export default function RevenuePage() {
         {/* Revenue by Location */}
         <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-lg">
           <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4">Revenue by Location</h3>
+          {locations.length === 0 ? (
+            <div className="flex items-center justify-center h-48 text-slate-500">No location data</div>
+          ) : (
           <div className="flex items-end justify-between gap-4 h-48 px-2">
             {locations.map((loc: any) => (
               <div key={loc.name} className="flex flex-col items-center gap-2 w-full">
@@ -80,19 +74,27 @@ export default function RevenuePage() {
               </div>
             ))}
           </div>
+          )}
         </div>
 
         {/* Payment Methods */}
         <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-lg">
           <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4">Payment Methods</h3>
+          {payments.length === 0 ? (
+            <div className="flex items-center justify-center h-48 text-slate-500">No payment data</div>
+          ) : (
           <div className="flex items-center justify-around h-48">
             <div
               className="relative size-40 rounded-full flex items-center justify-center"
-              style={{ background: `conic-gradient(#dc2626 0% 65%, #ff6b00 65% 90%, #94a3b8 90% 100%)` }}
+              style={{ background: `conic-gradient(${payments.map((p: any, i: number) => {
+                const start = payments.slice(0, i).reduce((sum: number, pm: any) => sum + pm.percentage, 0);
+                const end = start + p.percentage;
+                return `${p.color} ${start}% ${end}%`;
+              }).join(', ') || '#e2e8f0 0% 100%'})` }}
             >
               <div className="size-28 bg-slate-50 dark:bg-slate-800 rounded-full flex flex-col items-center justify-center">
                 <span className="text-xs font-bold text-slate-500">TOP</span>
-                <span className="text-sm font-black text-red-600">Wave 65%</span>
+                <span className="text-sm font-black text-red-600">{payments[0]?.name || 'N/A'} {payments[0]?.percentage || 0}%</span>
               </div>
             </div>
             <div className="flex flex-col gap-3">
@@ -105,6 +107,7 @@ export default function RevenuePage() {
               ))}
             </div>
           </div>
+          )}
         </div>
       </div>
 
@@ -113,6 +116,12 @@ export default function RevenuePage() {
         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           <h3 className="font-bold text-lg text-slate-900 dark:text-white">Recent Transactions</h3>
         </div>
+        {transactions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <DollarSign className="h-10 w-10 text-slate-400 mb-3" />
+            <p className="text-slate-500">No transactions yet</p>
+          </div>
+        ) : (
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase text-xs font-bold">
             <tr>
@@ -139,6 +148,7 @@ export default function RevenuePage() {
             ))}
           </tbody>
         </table>
+        )}
       </div>
     </div>
   );

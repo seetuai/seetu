@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Search, Grid, List, Play, Image, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Search, Grid, List, Play, Image, CheckCircle, Clock, XCircle, Loader2, FileVideo } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -19,17 +19,18 @@ export default function ContentLibraryPage() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [filter, setFilter] = useState<'all' | 'ready' | 'processing' | 'rejected'>('all');
 
-  const { data } = useSWR('/api/v1/admin/billboards/content', fetcher);
+  const { data, isLoading } = useSWR('/api/v1/admin/billboards/content', fetcher);
 
-  const mockContent: ContentItem[] = [
-    { id: '1', type: 'video', advertiser: 'Orange Senegal', status: 'ready', createdAt: '2 hours ago', durationSeconds: 15 },
-    { id: '2', type: 'video', advertiser: 'Nike', status: 'ready', createdAt: '5 hours ago', durationSeconds: 30 },
-    { id: '3', type: 'image', advertiser: 'CBAO', status: 'processing', createdAt: '1 day ago' },
-    { id: '4', type: 'video', advertiser: 'Local Business', status: 'rejected', createdAt: '2 days ago', durationSeconds: 45 },
-  ];
-
-  const content = data?.content || mockContent;
+  const content: ContentItem[] = data?.content || [];
   const filtered = filter === 'all' ? content : content.filter((c: ContentItem) => c.status === filter);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   const statusConfig = {
     ready: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100' },
@@ -82,6 +83,13 @@ export default function ContentLibraryPage() {
       </div>
 
       {/* Content Grid */}
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <FileVideo className="h-12 w-12 text-slate-400 mb-4" />
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No Content</h3>
+          <p className="text-slate-500 dark:text-slate-400">No content uploaded yet</p>
+        </div>
+      ) : (
       <div className={view === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-3'}>
         {filtered.map((item: ContentItem) => {
           const config = statusConfig[item.status];
@@ -111,6 +119,7 @@ export default function ContentLibraryPage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

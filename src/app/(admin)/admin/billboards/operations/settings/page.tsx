@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import useSWR from 'swr';
 import {
   Shield,
   DollarSign,
@@ -19,7 +20,10 @@ import {
   CheckCircle,
   AlertCircle,
   Clock,
+  Loader2,
 } from 'lucide-react';
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 interface AdminUser {
   id: string;
@@ -34,37 +38,46 @@ export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<'moderation' | 'pricing' | 'users' | 'system'>('moderation');
   const [showApiKey, setShowApiKey] = useState(false);
 
+  const { data: settingsData, isLoading: settingsLoading } = useSWR('/api/v1/admin/billboards/settings', fetcher);
+  const { data: usersData, isLoading: usersLoading } = useSWR('/api/v1/admin/billboards/settings/users', fetcher);
+  const { data: healthData, isLoading: healthLoading } = useSWR('/api/v1/admin/billboards/settings/health', fetcher);
+
   const [moderationSettings, setModerationSettings] = useState({
-    autoApproveThreshold: 85,
-    autoRejectThreshold: 30,
-    nudityThreshold: 15,
-    violenceThreshold: 20,
-    politicalThreshold: 25,
-    aiEnabled: true,
+    autoApproveThreshold: settingsData?.moderation?.autoApproveThreshold || 85,
+    autoRejectThreshold: settingsData?.moderation?.autoRejectThreshold || 30,
+    nudityThreshold: settingsData?.moderation?.nudityThreshold || 15,
+    violenceThreshold: settingsData?.moderation?.violenceThreshold || 20,
+    politicalThreshold: settingsData?.moderation?.politicalThreshold || 25,
+    aiEnabled: settingsData?.moderation?.aiEnabled ?? true,
   });
 
   const [pricingSettings, setPricingSettings] = useState({
-    basePricePerSlot: 5000,
-    premiumMultiplier: 1.5,
-    rushMultiplier: 2.0,
-    weekendMultiplier: 1.25,
-    bulkDiscount5: 10,
-    bulkDiscount10: 20,
+    basePricePerSlot: settingsData?.pricing?.basePricePerSlot || 5000,
+    premiumMultiplier: settingsData?.pricing?.premiumMultiplier || 1.5,
+    rushMultiplier: settingsData?.pricing?.rushMultiplier || 2.0,
+    weekendMultiplier: settingsData?.pricing?.weekendMultiplier || 1.25,
+    bulkDiscount5: settingsData?.pricing?.bulkDiscount5 || 10,
+    bulkDiscount10: settingsData?.pricing?.bulkDiscount10 || 20,
   });
 
-  const adminUsers: AdminUser[] = [
-    { id: '1', name: 'Amadou Diallo', email: 'amadou@seetu.sn', role: 'super_admin', lastActive: '2 mins ago', status: 'active' },
-    { id: '2', name: 'Fatou Sow', email: 'fatou@seetu.sn', role: 'admin', lastActive: '1 hour ago', status: 'active' },
-    { id: '3', name: 'Moussa Ndiaye', email: 'moussa@seetu.sn', role: 'moderator', lastActive: '3 hours ago', status: 'active' },
-    { id: '4', name: 'Aissatou Ba', email: 'aissatou@seetu.sn', role: 'viewer', lastActive: '2 days ago', status: 'suspended' },
-  ];
+  const adminUsers: AdminUser[] = usersData?.users || [];
 
-  const systemHealth = {
-    api: { status: 'healthy', latency: 42, uptime: 99.98 },
-    database: { status: 'healthy', connections: 23, maxConnections: 100 },
-    cdn: { status: 'healthy', bandwidth: '2.4 TB', cacheHitRate: 94.2 },
-    redis: { status: 'healthy', memory: '256 MB', keys: 12450 },
+  const systemHealth = healthData || {
+    api: { status: 'unknown', latency: 0, uptime: 0 },
+    database: { status: 'unknown', connections: 0, maxConnections: 0 },
+    cdn: { status: 'unknown', bandwidth: '0 TB', cacheHitRate: 0 },
+    redis: { status: 'unknown', memory: '0 MB', keys: 0 },
   };
+
+  const isLoading = activeSection === 'users' ? usersLoading : activeSection === 'system' ? healthLoading : settingsLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   const roleStyles = {
     super_admin: 'bg-purple-100 text-purple-600 border-purple-200',
@@ -359,6 +372,13 @@ export default function SettingsPage() {
             </div>
 
             {/* Users Table */}
+            {adminUsers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                <Users className="h-12 w-12 text-slate-400 mb-4" />
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No Admin Users</h3>
+                <p className="text-slate-500 dark:text-slate-400">Add your first admin user to get started</p>
+              </div>
+            ) : (
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase text-xs font-bold tracking-wider">
@@ -421,6 +441,7 @@ export default function SettingsPage() {
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* API Keys */}
             <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-6">

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Plus, Search, Settings, Copy, Wifi, WifiOff, Wrench } from 'lucide-react';
+import { Plus, Search, Settings, Copy, Wifi, WifiOff, Wrench, Loader2, Monitor } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -19,19 +19,20 @@ interface Billboard {
 
 export default function InventoryPage() {
   const [search, setSearch] = useState('');
-  const { data } = useSWR('/api/v1/admin/billboards?include_inactive=true', fetcher);
+  const { data, isLoading } = useSWR('/api/v1/admin/billboards?include_inactive=true', fetcher);
 
-  const mockBillboards: Billboard[] = [
-    { id: '1', name: 'Plateau Centre', slug: 'plateau-centre', address: "Place de l'Indépendance", status: 'online', resolution: '1080x2160', pricePerSlot: 5000, apiKey: 'bb_xxx' },
-    { id: '2', name: 'Almadies', slug: 'almadies', address: 'Route de Ngor', status: 'online', resolution: '1080x2160', pricePerSlot: 7500, apiKey: 'bb_xxx' },
-    { id: '3', name: 'VDN', slug: 'vdn', address: 'Voie de Dégagement Nord', status: 'online', resolution: '1080x2160', pricePerSlot: 6000, apiKey: 'bb_xxx' },
-    { id: '4', name: 'Médina', slug: 'medina', address: 'Avenue Blaise Diagne', status: 'offline', resolution: '1080x2160', pricePerSlot: 4000, apiKey: 'bb_xxx' },
-  ];
-
-  const billboards = data?.billboards || mockBillboards;
+  const billboards: Billboard[] = data?.billboards || [];
   const filtered = billboards.filter((b: Billboard) =>
     b.name.toLowerCase().includes(search.toLowerCase()) || b.address.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   const statusConfig = {
     online: { icon: Wifi, color: 'text-green-600', bg: 'bg-green-100' },
@@ -79,6 +80,13 @@ export default function InventoryPage() {
       </div>
 
       {/* Table */}
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <Monitor className="h-12 w-12 text-slate-400 mb-4" />
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No Billboards</h3>
+          <p className="text-slate-500 dark:text-slate-400">Add your first billboard to get started</p>
+        </div>
+      ) : (
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 uppercase text-xs font-bold">
@@ -126,6 +134,7 @@ export default function InventoryPage() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

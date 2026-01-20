@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { AlertTriangle, AlertCircle, Info, CheckCircle, Download } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, CheckCircle, Download, Loader2, Bell } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -20,18 +20,23 @@ export default function AlertsPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
   const [selectedAlerts, setSelectedAlerts] = useState<string[]>([]);
 
-  const { data } = useSWR('/api/v1/admin/billboards/activity', fetcher);
+  const { data, isLoading } = useSWR('/api/v1/admin/billboards/activity', fetcher);
 
-  const mockAlerts: Alert[] = [
-    { id: '1', type: 'critical', title: 'Billboard Offline: Almadies Screen 2', description: 'Connectivity lost. Heartbeat signal timed out.', timestamp: '2 mins ago', billboardId: 'ALM-002', read: false },
-    { id: '2', type: 'critical', title: 'High Risk Content Detected', description: 'AI scan flagged non-compliant imagery in campaign.', timestamp: '15 mins ago', read: false },
-    { id: '3', type: 'warning', title: 'Payment Failed for User #842', description: 'Monthly subscription renewal failed.', timestamp: '1 hour ago', read: false },
-    { id: '4', type: 'info', title: 'Scheduled Maintenance: Yoff Sector', description: 'Network optimization scheduled for 02:00 AM.', timestamp: '3 hours ago', read: false },
-    { id: '5', type: 'resolved', title: 'New Billboard Registered: Ngor', description: 'Billboard NGR-005 successfully registered and online.', timestamp: 'Yesterday', billboardId: 'NGR-005', read: true },
-  ];
+  const alerts: Alert[] = data?.alerts || [];
+  const stats = data?.stats || {
+    total: alerts.length,
+    critical: alerts.filter((a: Alert) => a.type === 'critical').length,
+    warning: alerts.filter((a: Alert) => a.type === 'warning').length,
+    info: alerts.filter((a: Alert) => a.type === 'info').length
+  };
 
-  const alerts = data?.alerts || mockAlerts;
-  const stats = data?.stats || { total: 24, critical: 2, warning: 8, info: 14 };
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   const filteredAlerts = activeTab === 'all' ? alerts : alerts.filter((a: Alert) => a.type === activeTab);
 
@@ -87,6 +92,13 @@ export default function AlertsPage() {
       </div>
 
       {/* Alert List */}
+      {filteredAlerts.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <Bell className="h-12 w-12 text-slate-400 mb-4" />
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No Alerts</h3>
+          <p className="text-slate-500 dark:text-slate-400">All systems operating normally</p>
+        </div>
+      ) : (
       <div className="space-y-3">
         {filteredAlerts.map((alert: Alert) => {
           const config = typeConfig[alert.type];
@@ -128,6 +140,7 @@ export default function AlertsPage() {
           );
         })}
       </div>
+      )}
 
       {/* Pagination */}
       <div className="flex items-center justify-between pt-4 text-sm text-slate-500 dark:text-slate-400">

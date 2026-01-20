@@ -1,21 +1,24 @@
 'use client';
 
 import useSWR from 'swr';
-import { Monitor, Shield, DollarSign, Play, TrendingUp, MapPin, AlertCircle } from 'lucide-react';
+import { Monitor, Shield, DollarSign, Play, TrendingUp, MapPin, AlertCircle, Loader2 } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function OperationsDashboard() {
-  const { data: stats } = useSWR('/api/v1/admin/billboards/stats', fetcher, { refreshInterval: 30000 });
+  const { data: stats, isLoading } = useSWR('/api/v1/admin/billboards/stats', fetcher, { refreshInterval: 30000 });
+  const { data: moderationData } = useSWR('/api/v1/admin/billboards/content?status=pending_moderation&limit=3', fetcher);
 
-  const mockStats = {
-    billboards: { total: 12, online: 10, offline: 2 },
-    content: { pendingModeration: 5 },
-    queue: { completedToday: 847 },
-    revenue: { thisMonth: 45500000 },
-  };
+  const s = stats || { billboards: {}, content: {}, queue: {}, revenue: {} };
+  const pendingContent = moderationData?.content || [];
 
-  const s = stats || mockStats;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -24,7 +27,9 @@ export default function OperationsDashboard() {
         <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-lg">
           <div className="flex items-center justify-between mb-2">
             <Monitor className="h-5 w-5 text-blue-600" />
-            <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded">LIVE</span>
+            {(s.billboards?.online || 0) > 0 && (
+              <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded">LIVE</span>
+            )}
           </div>
           <p className="text-3xl font-bold text-slate-900 dark:text-white">{s.billboards?.online || 0}/{s.billboards?.total || 0}</p>
           <p className="text-sm text-slate-500">Billboards Online</p>
@@ -44,7 +49,7 @@ export default function OperationsDashboard() {
         <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-lg">
           <div className="flex items-center justify-between mb-2">
             <DollarSign className="h-5 w-5 text-green-600" />
-            <TrendingUp className="h-4 w-4 text-green-600" />
+            {(s.revenue?.thisMonth || 0) > 0 && <TrendingUp className="h-4 w-4 text-green-600" />}
           </div>
           <p className="text-3xl font-bold text-slate-900 dark:text-white">{((s.revenue?.thisMonth || 0) / 1000000).toFixed(1)}M</p>
           <p className="text-sm text-slate-500">Revenue This Month (FCFA)</p>
@@ -77,16 +82,28 @@ export default function OperationsDashboard() {
             Moderation Queue
           </h3>
           <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center gap-3 p-2 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
-                <div className="size-10 bg-slate-200 dark:bg-slate-700 rounded" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">Content #{i}</p>
-                  <p className="text-xs text-slate-500">Awaiting review</p>
+            {pendingContent.length === 0 ? (
+              <p className="text-sm text-slate-500 text-center py-4">No content pending moderation</p>
+            ) : (
+              pendingContent.map((item: any) => (
+                <div key={item.id} className="flex items-center gap-3 p-2 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700">
+                  <div className="size-10 bg-slate-200 dark:bg-slate-700 rounded overflow-hidden">
+                    {item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{item.advertiser || 'Unknown'}</p>
+                    <p className="text-xs text-slate-500">Awaiting review</p>
+                  </div>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                    item.riskLevel === 'high' ? 'text-red-600 bg-red-100' :
+                    item.riskLevel === 'medium' ? 'text-amber-600 bg-amber-100' :
+                    'text-green-600 bg-green-100'
+                  }`}>
+                    {(item.riskLevel || 'low').toUpperCase()}
+                  </span>
                 </div>
-                <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded">MEDIUM</span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

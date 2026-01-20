@@ -220,8 +220,9 @@ export function validateLocalPath(requestedPath: string): { valid: boolean; erro
     return { valid: false, error: 'Path traversal not allowed' };
   }
 
-  // Block null bytes and other dangerous characters
-  if (/[\x00-\x1f]/.test(requestedPath)) {
+  // Block null bytes and other dangerous characters (ASCII control chars 0-31)
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f]/.test(requestedPath)) {
     return { valid: false, error: 'Invalid characters in path' };
   }
 

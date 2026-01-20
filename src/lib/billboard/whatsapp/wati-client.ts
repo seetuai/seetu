@@ -374,9 +374,10 @@ class WatiClient {
         message.buttonText = button?.text;
       } else if (messageType === 'list_reply' || body.list_reply || body.interactive) {
         message.type = 'list_reply';
-        const list = (body.list_reply || body.interactive) as Record<string, string>;
-        message.listId = list?.id || list?.list_reply?.id;
-        message.listTitle = list?.title || list?.list_reply?.title;
+        const list = (body.list_reply || body.interactive) as Record<string, unknown>;
+        const nestedList = list?.list_reply as Record<string, string> | undefined;
+        message.listId = list?.id as string || nestedList?.id;
+        message.listTitle = list?.title as string || nestedList?.title;
       }
 
       return message;

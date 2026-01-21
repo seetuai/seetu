@@ -7,7 +7,7 @@ import { Queue, QueueEvents } from 'bullmq';
 import { redis, isRedisConfigured } from '../redis';
 
 // Queue configuration
-const QUEUE_NAME = 'seetu:batch-generation';
+const QUEUE_NAME = 'seetu-batch-generation';
 
 export interface BatchJobData {
   batchJobId: string;

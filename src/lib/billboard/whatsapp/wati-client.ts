@@ -266,49 +266,92 @@ class WatiClient {
    */
   async sendList(params: SendListParams): Promise<{ success: boolean; messageId?: string }> {
     try {
-      // WATI API requires phone number in URL path
-      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendInteractiveListMessage/${params.phone}`, {
+      console.log('[WATI] Sending list to:', params.phone, 'sections:', JSON.stringify(params.sections));
+
+      const url = `${this.config.apiUrl}/api/v1/sendInteractiveListMessage/${params.phone}`;
+      const body = {
+        header: '',
+        body: params.body,
+        footer: '',
+        buttonText: params.buttonText,
+        sections: params.sections,
+      };
+
+      const response = await fetch(url, {
         method: 'POST',
-        body: JSON.stringify({
-          body: params.body,
-          buttonText: params.buttonText,
-          sections: params.sections,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiToken}`,
+        },
+        body: JSON.stringify(body),
       });
 
-      return { success: result.result, messageId: result.info };
+      const result = await response.json();
+      console.log('[WATI] List response:', response.status, JSON.stringify(result));
+
+      if (!response.ok || result.result === false) {
+        throw new Error(result.message || 'List message failed');
+      }
+
+      return { success: true, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send list error:', error);
-      return { success: false };
+      // Fallback to text message
+      let fallbackMsg = params.body + '\n\n';
+      params.sections.forEach(section => {
+        section.rows.forEach((row, i) => {
+          fallbackMsg += `${i + 1}. ${row.title}\n`;
+        });
+      });
+      return this.sendMessage({ phone: params.phone, message: fallbackMsg });
     }
   }
 
   /**
    * Send CTA URL button message (for payment links etc)
+   * Note: CTA URL buttons may only work with template messages in some WATI setups
    */
   async sendCTAButton(params: SendCTAButtonParams): Promise<{ success: boolean; messageId?: string }> {
     try {
       console.log('[WATI] Sending CTA button to:', params.phone);
-      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendInteractiveCTAButtonMessage/${params.phone}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          body: params.body,
-          footer: params.footer || '',
-          button: {
+
+      const url = `${this.config.apiUrl}/api/v1/sendInteractiveCTAButtonMessage/${params.phone}`;
+      const body = {
+        header: { type: 'Text', text: '' },
+        body: params.body,
+        footer: params.footer || '',
+        buttons: [
+          {
+            type: 'url',
             text: params.buttonText,
             url: params.url,
           },
-        }),
+        ],
+      };
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiToken}`,
+        },
+        body: JSON.stringify(body),
       });
 
-      console.log('[WATI] CTA button response:', result);
-      return { success: result.result, messageId: result.info };
+      const result = await response.json();
+      console.log('[WATI] CTA button response:', response.status, JSON.stringify(result));
+
+      if (!response.ok || result.result === false) {
+        throw new Error(result.message || 'CTA button failed');
+      }
+
+      return { success: true, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send CTA button error:', error);
-      // Fallback to plain text if CTA button fails
+      // Fallback to plain text with link
       return this.sendMessage({
         phone: params.phone,
-        message: `${params.body}\n\n${params.url}`,
+        message: `${params.body}\n\n💳 Payer: ${params.url}`,
       });
     }
   }

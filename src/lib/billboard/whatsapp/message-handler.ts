@@ -68,10 +68,15 @@ export async function handleIncomingMessage(
         return await handlePaymentState(message, session);
 
       case 'CONFIRMED':
-        // After confirmation, allow new orders
+        // If user sends media, process it directly for new order
+        if (message.type === 'image' || message.type === 'video') {
+          await updateSessionState(message.phone, 'AWAITING_MEDIA');
+          return await handleMediaState(message, session);
+        }
+        // Otherwise prompt for new order
         await wati.sendMessage({
           phone: message.phone,
-          message: templates.RETURNING_USER_MESSAGE(session.name || undefined),
+          message: 'Envoyez une image ou vidéo pour une nouvelle pub.',
         });
         await updateSessionState(message.phone, 'AWAITING_MEDIA');
         return { success: true };

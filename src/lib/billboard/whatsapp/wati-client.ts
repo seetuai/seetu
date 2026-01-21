@@ -343,61 +343,25 @@ class WatiClient {
 
   /**
    * Send CTA URL button message (for payment links etc)
-   * Uses WATI's sendInteractiveButtonsMessage with URL button type
+   * Note: WhatsApp CTA URL buttons typically require approved templates
+   * Falls back to formatted text message with link
    */
   async sendCTAButton(params: SendCTAButtonParams): Promise<{ success: boolean; messageId?: string }> {
-    try {
-      console.log('[WATI] Sending CTA button to:', params.phone);
+    console.log('[WATI] Sending payment link to:', params.phone);
 
-      // WATI API endpoint for interactive buttons (supports URL type)
-      const url = `${this.config.apiUrl}/api/v1/sendInteractiveButtonsMessage?whatsappNumber=${params.phone}`;
+    // WhatsApp CTA URL buttons require pre-approved templates
+    // Send a well-formatted message with the payment link instead
+    const message = `${params.body}\n\n` +
+      `━━━━━━━━━━━━━━━\n` +
+      `💳 *${params.buttonText}*\n` +
+      `👉 ${params.url}\n` +
+      `━━━━━━━━━━━━━━━` +
+      (params.footer ? `\n\n${params.footer}` : '');
 
-      // WATI format for URL button
-      const body = {
-        header: {
-          type: 'Text',
-          text: '',
-        },
-        body: params.body,
-        footer: params.footer || '',
-        buttons: [
-          {
-            type: 'url',
-            text: params.buttonText.substring(0, 20), // Max 20 chars for buttons
-            url: params.url,
-          },
-        ],
-      };
-
-      console.log('[WATI] CTA button request body:', JSON.stringify(body));
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiToken}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      const responseText = await response.text();
-      console.log('[WATI] CTA button response:', response.status, responseText);
-
-      const result = responseText ? JSON.parse(responseText) : {};
-
-      if (!response.ok || result.result === false) {
-        throw new Error(result.message || result.info || 'CTA button failed');
-      }
-
-      return { success: true, messageId: result.info };
-    } catch (error) {
-      console.error('[WATI] Send CTA button error:', error);
-      // Fallback to plain text with link
-      return this.sendMessage({
-        phone: params.phone,
-        message: `${params.body}\n\n💳 Payer: ${params.url}`,
-      });
-    }
+    return this.sendMessage({
+      phone: params.phone,
+      message,
+    });
   }
 
   /**

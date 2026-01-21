@@ -381,8 +381,13 @@ class WatiClient {
   async sendCTAButton(params: SendCTAButtonParams): Promise<{ success: boolean; messageId?: string }> {
     console.log('[WATI] Sending payment link to:', params.phone);
 
+    // Skip template for now - WhatsApp URL-encodes query params in CTA buttons
+    // which breaks Wave checkout URLs that need ?a=X&c=XOF&m=Y
+    // Use text message with clickable link instead (this was working before)
+    const useTemplate = false;
+
     // Try template if available
-    if (params.templateName && params.templateParams) {
+    if (useTemplate && params.templateName && params.templateParams) {
       try {
         const { billboardName, price, checkoutId } = params.templateParams;
 

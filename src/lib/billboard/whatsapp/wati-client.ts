@@ -56,6 +56,14 @@ export interface SendListParams {
   }>;
 }
 
+export interface SendCTAButtonParams {
+  phone: string;
+  body: string;
+  footer?: string;
+  buttonText: string;
+  url: string;
+}
+
 export interface WatiContact {
   phone: string;
   name: string;
@@ -272,6 +280,36 @@ class WatiClient {
     } catch (error) {
       console.error('[WATI] Send list error:', error);
       return { success: false };
+    }
+  }
+
+  /**
+   * Send CTA URL button message (for payment links etc)
+   */
+  async sendCTAButton(params: SendCTAButtonParams): Promise<{ success: boolean; messageId?: string }> {
+    try {
+      console.log('[WATI] Sending CTA button to:', params.phone);
+      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendInteractiveCTAButtonMessage/${params.phone}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          body: params.body,
+          footer: params.footer || '',
+          button: {
+            text: params.buttonText,
+            url: params.url,
+          },
+        }),
+      });
+
+      console.log('[WATI] CTA button response:', result);
+      return { success: result.result, messageId: result.info };
+    } catch (error) {
+      console.error('[WATI] Send CTA button error:', error);
+      // Fallback to plain text if CTA button fails
+      return this.sendMessage({
+        phone: params.phone,
+        message: `${params.body}\n\n${params.url}`,
+      });
     }
   }
 

@@ -235,10 +235,10 @@ async function handleMediaState(
     return { success: true };
   }
 
-  // Acknowledge receipt
+  // Short processing message
   await wati.sendMessage({
     phone: message.phone,
-    message: templates.MEDIA_RECEIVED,
+    message: '⏳ Traitement en cours...',
   });
 
   try {
@@ -259,17 +259,11 @@ async function handleMediaState(
       throw new Error(`Failed to download media: ${response.status}`);
     }
 
-    console.log('[WA_HANDLER] Media downloaded successfully, size:', response.headers.get('content-length'));
-
     const buffer = Buffer.from(await response.arrayBuffer());
-    console.log('[WA_HANDLER] Buffer created, size:', buffer.length);
-
     const contentType = response.headers.get('content-type') ||
       (message.type === 'video' ? 'video/mp4' : 'image/jpeg');
     const extension = message.type === 'video' ? 'mp4' : 'jpg';
     const filename = `billboard-whatsapp-${message.phone}-${Date.now()}.${extension}`;
-
-    console.log('[WA_HANDLER] Uploading to storage:', filename, contentType);
 
     const upload = await uploadBuffer(
       BUCKETS.UPLOADS,
@@ -278,8 +272,6 @@ async function handleMediaState(
       contentType
     );
 
-    console.log('[WA_HANDLER] Upload complete:', upload.url);
-
     // Create content record
     const content = await prisma.billboardContent.create({
       data: {
@@ -287,42 +279,23 @@ async function handleMediaState(
         whatsappName: session.name,
         mediaType: message.type,
         originalUrl: upload.url,
-        status: 'pending_validation',
+        status: 'pending_payment',
       },
     });
-
-    console.log('[WA_HANDLER] Content record created:', content.id);
 
     // Update session with content ID
     await setSessionContent(message.phone, content.id);
 
-    // For MVP: Skip queue-based validation/moderation and go directly to billboard selection
-    // TODO: Enable queue-based processing when workers are deployed
-    console.log('[WA_HANDLER] MVP mode: Skipping queue, moving to billboard selection');
-
-    // Update content status (simulating validation pass)
-    await prisma.billboardContent.update({
-      where: { id: content.id },
-      data: { status: 'pending_payment' },
-    });
-
-    // Update session state and send billboard list
+    // Update session state and send billboard list directly
     await updateSessionState(message.phone, 'AWAITING_BILLBOARD');
-    await wati.sendMessage({
-      phone: message.phone,
-      message: templates.MEDIA_VALIDATION_SUCCESS,
-    });
     await sendBillboardList(message.phone);
 
-    console.log('[WA_HANDLER] Billboard selection list sent');
     return { success: true };
   } catch (error) {
     console.error('[WA_HANDLER] Media upload error:', error);
     await wati.sendMessage({
       phone: message.phone,
-      message: templates.MEDIA_VALIDATION_ERROR(
-        error instanceof Error ? error.message : 'Erreur lors du téléchargement'
-      ),
+      message: '❌ Erreur. Réessayez avec une autre image/vidéo.',
     });
     return { success: false, error: 'Media upload failed' };
   }
@@ -436,18 +409,8 @@ async function handleBillboardSelection(
 ): Promise<HandlerResult> {
   const wati = getWatiClient();
 
-  // Need text input for selection
+  // Need text or list_reply for selection
   if (message.type !== 'text' && message.type !== 'list_reply') {
-    await sendBillboardList(message.phone);
-    return { success: true };
-  }
-
-  // Get user's selection text
-  const userSelection = message.type === 'list_reply' && message.listTitle
-    ? message.listTitle
-    : message.text || '';
-
-  if (!userSelection.trim()) {
     await sendBillboardList(message.phone);
     return { success: true };
   }
@@ -459,18 +422,31 @@ async function handleBillboardSelection(
     select: { id: true, name: true, address: true, pricePerSlot: true },
   });
 
-  // Use LLM to parse natural language selection
-  console.log('[WA_HANDLER] Parsing billboard selection:', userSelection);
-  const selectedIds = await parseBillboardSelectionWithLLM(userSelection, billboards);
+  let selectedIds: string[] = [];
+
+  // Handle list reply (from interactive list)
+  if (message.type === 'list_reply' && message.listId) {
+    console.log('[WA_HANDLER] List reply received, listId:', message.listId);
+    if (message.listId === 'all') {
+      selectedIds = billboards.map(b => b.id);
+    } else {
+      selectedIds = [message.listId];
+    }
+  } else {
+    // Handle text input - use LLM or simple matching
+    const userSelection = message.text || '';
+    if (!userSelection.trim()) {
+      await sendBillboardList(message.phone);
+      return { success: true };
+    }
+    console.log('[WA_HANDLER] Parsing billboard selection:', userSelection);
+    selectedIds = await parseBillboardSelectionWithLLM(userSelection, billboards);
+  }
 
   const selectedBillboards = billboards.filter(b => selectedIds.includes(b.id));
 
   if (selectedBillboards.length === 0) {
-    // Didn't understand, ask for clarification
-    await wati.sendMessage({
-      phone: message.phone,
-      message: `Je n'ai pas trouvé de panneau correspondant à "${userSelection}".\n\nVoici les panneaux disponibles:\n${billboards.map((b, i) => `• ${b.name}`).join('\n')}\n\nQuel panneau souhaitez-vous?`,
-    });
+    await sendBillboardList(message.phone);
     return { success: true };
   }
 
@@ -481,34 +457,15 @@ async function handleBillboardSelection(
   // Calculate price
   const billboardSlots: Record<string, number> = {};
   billboardIds.forEach(id => {
-    billboardSlots[id] = 1; // 1 slot per billboard
+    billboardSlots[id] = 1;
   });
-
   const pricing = await calculatePrice(billboardSlots);
-
-  // Confirm selection
-  await wati.sendMessage({
-    phone: message.phone,
-    message: templates.BILLBOARD_SELECTION_CONFIRMED(selectedBillboards.length),
-  });
-
-  // Send price summary
-  await wati.sendMessage({
-    phone: message.phone,
-    message: templates.formatPriceSummary(
-      selectedBillboards.map(b => ({ name: b.name, price: b.pricePerSlot })),
-      pricing.subtotal,
-      pricing.discount,
-      pricing.totalCfa,
-      pricing.discountReason
-    ),
-  });
 
   // Create payment
   if (!session.currentContentId) {
     await wati.sendMessage({
       phone: message.phone,
-      message: 'Erreur: contenu introuvable. Envoyez "reprendre" pour recommencer.',
+      message: '❌ Erreur. Envoyez "reprendre" pour recommencer.',
     });
     return { success: false, error: 'No content ID in session' };
   }
@@ -524,10 +481,20 @@ async function handleBillboardSelection(
     await setPaymentId(message.phone, payment.id);
     await updateSessionState(message.phone, 'AWAITING_PAYMENT');
 
-    // Send payment link
-    await wati.sendMessage({
+    // Build recap message
+    const billboardNames = selectedBillboards.map(b => b.name).join(', ');
+    const recapBody = `📋 *Récapitulatif*\n\n` +
+      `📺 ${selectedBillboards.length > 1 ? 'Panneaux' : 'Panneau'}: ${billboardNames}\n` +
+      `💰 Total: ${pricing.totalCfa} F CFA` +
+      (pricing.discount > 0 ? ` (${pricing.discountReason})` : '');
+
+    // Send CTA button for payment
+    await wati.sendCTAButton({
       phone: message.phone,
-      message: `${templates.PAYMENT_PROMPT}\n\n${templates.formatPaymentLink(payment.checkoutUrl)}`,
+      body: recapBody,
+      footer: 'Paiement sécurisé via Wave',
+      buttonText: '💳 Payer maintenant',
+      url: payment.checkoutUrl,
     });
 
     return { success: true };
@@ -535,7 +502,7 @@ async function handleBillboardSelection(
     console.error('[WA_HANDLER] Payment creation failed:', error);
     await wati.sendMessage({
       phone: message.phone,
-      message: `Une erreur est survenue lors de la création du paiement. Veuillez réessayer en envoyant le nom du panneau à nouveau.\n\nSi le problème persiste, envoyez "support" pour nous contacter.`,
+      message: '❌ Erreur de paiement. Réessayez ou envoyez "support".',
     });
     return { success: false, error: 'Payment creation failed' };
   }
@@ -583,7 +550,7 @@ async function handlePaymentState(
 }
 
 /**
- * Send billboard list to user
+ * Send billboard list to user using interactive list
  */
 async function sendBillboardList(phone: string): Promise<void> {
   const wati = getWatiClient();
@@ -613,29 +580,46 @@ async function sendBillboardList(phone: string): Promise<void> {
   if (billboards.length === 0) {
     await wati.sendMessage({
       phone,
-      message: 'Aucun panneau disponible pour le moment. Réessayez plus tard.',
+      message: 'Aucun panneau disponible. Réessayez plus tard.',
     });
     return;
   }
 
-  // Build billboard list message
-  let message = `${templates.BILLBOARD_SELECTION_INTRO}\n\n`;
-
-  billboards.forEach((b, index) => {
-    message += templates.formatBillboardOption(
-      index + 1,
-      b.name,
-      b.address,
-      b.pricePerSlot,
-      Math.round(b.slotDurationSecs / 60),
-      b._count.queueItems
-    );
-    message += '\n\n';
+  // Use interactive list for billboard selection
+  const listResult = await wati.sendList({
+    phone,
+    body: '✅ Fichier reçu! Choisissez où diffuser votre pub:',
+    buttonText: 'Voir les panneaux',
+    sections: [
+      {
+        title: 'Panneaux disponibles',
+        rows: [
+          // Add "All billboards" option first
+          {
+            id: 'all',
+            title: '📺 Tous les panneaux',
+            description: `${billboards.length} panneaux - Meilleure visibilité`,
+          },
+          // Add individual billboards
+          ...billboards.map((b) => ({
+            id: b.id,
+            title: b.name,
+            description: `${b.address} • ${b.pricePerSlot} F`,
+          })),
+        ],
+      },
+    ],
   });
 
-  message += templates.BILLBOARD_SELECTION_PROMPT;
-
-  await wati.sendMessage({ phone, message });
+  // Fallback to text if list fails
+  if (!listResult.success) {
+    let message = '✅ Fichier reçu! Choisissez un panneau:\n\n';
+    billboards.forEach((b, i) => {
+      message += `${i + 1}. ${b.name} - ${b.pricePerSlot} F\n`;
+    });
+    message += '\nRépondez avec le numéro ou "tous"';
+    await wati.sendMessage({ phone, message });
+  }
 }
 
 /**

@@ -11,11 +11,11 @@
 import { Queue, QueueEvents } from 'bullmq';
 import { redis, isRedisConfigured } from '../redis';
 
-// Queue names
+// Queue names (no colons - BullMQ restriction)
 export const BILLBOARD_QUEUES = {
-  VALIDATION: 'seetu:billboard-validation',
-  MODERATION: 'seetu:billboard-moderation',
-  TRANSCODING: 'seetu:billboard-transcoding',
+  VALIDATION: 'seetu-billboard-validation',
+  MODERATION: 'seetu-billboard-moderation',
+  TRANSCODING: 'seetu-billboard-transcoding',
 } as const;
 
 // Job types

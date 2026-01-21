@@ -59,11 +59,11 @@ if (isRedisConfigured()) {
   }
 }
 
-// Queue names
+// Queue names (no colons - BullMQ restriction)
 export const QUEUES = {
-  GENERATION: 'seetu:generation',
-  EXPORT: 'seetu:export',
-  BACKGROUND_REMOVAL: 'seetu:background-removal',
+  GENERATION: 'seetu-generation',
+  EXPORT: 'seetu-export',
+  BACKGROUND_REMOVAL: 'seetu-background-removal',
 } as const;
 
 // Mock queue for development (in-memory)

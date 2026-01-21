@@ -198,7 +198,7 @@ class WatiClient {
         broadcast_name: `billboard-${Date.now()}`,
       };
 
-      // Add parameters if provided
+      // Add parameters if provided - WATI expects array format
       if (params.parameters) {
         body.parameters = Object.entries(params.parameters).map(([name, value]) => ({
           name,
@@ -213,13 +213,30 @@ class WatiClient {
         };
       }
 
-      // WATI API requires phone number in URL path
-      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendTemplateMessage/${params.phone}`, {
+      console.log('[WATI] Template request:', params.templateName, JSON.stringify(body));
+
+      // WATI API - use query param for phone number
+      const url = `${this.config.apiUrl}/api/v1/sendTemplateMessage?whatsappNumber=${params.phone}`;
+
+      const response = await fetch(url, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiToken}`,
+        },
         body: JSON.stringify(body),
       });
 
-      return { success: result.result, messageId: result.info };
+      const responseText = await response.text();
+      console.log('[WATI] Template response:', response.status, responseText);
+
+      const result = responseText ? JSON.parse(responseText) : {};
+
+      if (!response.ok || result.result === false) {
+        throw new Error(result.message || result.info || 'Template send failed');
+      }
+
+      return { success: true, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send template error:', error);
       return { success: false };

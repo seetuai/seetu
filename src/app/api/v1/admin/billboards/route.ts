@@ -10,7 +10,7 @@ import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
 // Superadmin emails (same pattern as existing admin routes)
-const SUPERADMIN_EMAILS = ['admin@seetu.sn', 'ali@seetu.sn'];
+const SUPERADMIN_EMAILS = (process.env.SUPERADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
 
 async function isAdmin(request: NextRequest): Promise<boolean> {
   const supabase = await createServiceClient();

@@ -2,17 +2,31 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Search, Grid, List, Play, Image, CheckCircle, Clock, XCircle, Loader2, FileVideo } from 'lucide-react';
+import { Search, Grid, List, Play, Image, CheckCircle, Clock, XCircle, Loader2, FileVideo, AlertCircle } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 interface ContentItem {
   id: string;
-  type: 'video' | 'image';
-  advertiser: string;
-  status: 'ready' | 'processing' | 'rejected';
+  mediaType: 'video' | 'image';
+  originalUrl: string;
+  processedUrls: Record<string, string>;
+  status: string;
+  whatsappPhone?: string;
+  whatsappName?: string;
   createdAt: string;
   durationSeconds?: number;
+  user?: { id: string; email: string; name?: string };
+  payment?: { id: string; status: string; amountCfa: number };
+  billboards: { id: string; name: string; queueStatus: string }[];
+}
+
+// Map API status to display status
+function mapStatus(status: string): 'ready' | 'processing' | 'rejected' | 'pending' {
+  if (status === 'ready') return 'ready';
+  if (status === 'pending_validation' || status === 'pending_moderation' || status === 'pending_payment' || status === 'processing') return 'processing';
+  if (status === 'rejected') return 'rejected';
+  return 'pending';
 }
 
 export default function ContentLibraryPage() {
@@ -21,8 +35,8 @@ export default function ContentLibraryPage() {
 
   const { data, isLoading } = useSWR('/api/v1/admin/billboards/content', fetcher);
 
-  const content: ContentItem[] = data?.content || [];
-  const filtered = filter === 'all' ? content : content.filter((c: ContentItem) => c.status === filter);
+  const content: ContentItem[] = data?.contents || [];
+  const filtered = filter === 'all' ? content : content.filter((c: ContentItem) => mapStatus(c.status) === filter);
 
   if (isLoading) {
     return (
@@ -92,13 +106,23 @@ export default function ContentLibraryPage() {
       ) : (
       <div className={view === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-3'}>
         {filtered.map((item: ContentItem) => {
-          const config = statusConfig[item.status];
+          const displayStatus = mapStatus(item.status);
+          const config = statusConfig[displayStatus] || statusConfig.processing;
           const StatusIcon = config.icon;
+          const advertiser = item.whatsappName || item.user?.email || item.whatsappPhone || 'Unknown';
 
           return (
             <div key={item.id} className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden hover:border-red-300 transition-colors">
-              <div className="aspect-[9/16] bg-slate-900 relative flex items-center justify-center">
-                {item.type === 'video' ? <Play className="h-12 w-12 text-white/30" /> : <Image className="h-12 w-12 text-white/30" />}
+              <div className="aspect-[9/16] bg-slate-900 relative flex items-center justify-center overflow-hidden">
+                {item.originalUrl ? (
+                  item.mediaType === 'video' ? (
+                    <video src={item.originalUrl} className="w-full h-full object-cover" muted />
+                  ) : (
+                    <img src={item.originalUrl} alt="" className="w-full h-full object-cover" />
+                  )
+                ) : (
+                  item.mediaType === 'video' ? <Play className="h-12 w-12 text-white/30" /> : <Image className="h-12 w-12 text-white/30" />
+                )}
                 {item.durationSeconds && (
                   <span className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
                     {item.durationSeconds}s
@@ -107,13 +131,16 @@ export default function ContentLibraryPage() {
               </div>
               <div className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{item.advertiser}</p>
+                  <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{advertiser}</p>
                   <span className={`flex items-center gap-1 text-xs font-bold ${config.color}`}>
                     <StatusIcon className="h-3 w-3" />
                     {item.status}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{item.createdAt}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(item.createdAt).toLocaleString('fr-FR')}</p>
+                {item.payment && (
+                  <p className="text-xs text-green-600 font-medium mt-1">{item.payment.amountCfa} CFA - {item.payment.status}</p>
+                )}
               </div>
             </div>
           );

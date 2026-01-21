@@ -1,18 +1,30 @@
 import { Redis } from 'ioredis';
 
-// Check if Redis is configured
+// Check if Redis is configured (Railway or Upstash)
 const isRedisConfigured = () => {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  return url && !url.includes('example');
+  // Railway Redis
+  if (process.env.REDIS_URL || process.env.REDIS_PRIVATE_URL) {
+    return true;
+  }
+  // Upstash Redis (legacy)
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+  return upstashUrl && !upstashUrl.includes('example');
 };
 
-// Create Redis client for BullMQ (only if configured)
+// Get Redis URL (Railway or Upstash)
 const getRedisUrl = () => {
+  // Railway Redis (preferred)
+  if (process.env.REDIS_PRIVATE_URL) {
+    return process.env.REDIS_PRIVATE_URL;
+  }
+  if (process.env.REDIS_URL) {
+    return process.env.REDIS_URL;
+  }
+  // Upstash Redis (legacy)
   const url = process.env.UPSTASH_REDIS_REST_URL;
   if (!url) {
     return null;
   }
-  // Convert REST URL to standard Redis URL if needed
   return url.replace('https://', 'rediss://').replace('.upstash.io', '.upstash.io:6379');
 };
 
@@ -27,15 +39,23 @@ let redis: Redis | null = null;
 if (isRedisConfigured()) {
   const redisUrl = getRedisUrl();
   if (redisUrl) {
-    redis = globalForRedis.redis ?? new Redis(redisUrl, {
+    const redisOptions: Record<string, unknown> = {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
-      password: process.env.UPSTASH_REDIS_REST_TOKEN,
-    });
+    };
+
+    // Only add password for Upstash (Railway includes it in URL)
+    if (process.env.UPSTASH_REDIS_REST_TOKEN && !process.env.REDIS_URL) {
+      redisOptions.password = process.env.UPSTASH_REDIS_REST_TOKEN;
+    }
+
+    redis = globalForRedis.redis ?? new Redis(redisUrl, redisOptions);
 
     if (process.env.NODE_ENV !== 'production') {
       globalForRedis.redis = redis;
     }
+
+    console.log('[REDIS] Connected to Redis:', redisUrl.replace(/\/\/.*@/, '//***@'));
   }
 }
 

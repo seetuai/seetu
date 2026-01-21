@@ -430,12 +430,29 @@ async function handleBillboardSelection(
   let selectedIds: string[] = [];
 
   // Handle list reply (from interactive list)
-  if (message.type === 'list_reply' && message.listId) {
-    console.log('[WA_HANDLER] List reply received, listId:', message.listId);
-    if (message.listId === 'all') {
+  if (message.type === 'list_reply' && (message.listId || message.listTitle)) {
+    console.log('[WA_HANDLER] List reply received:', { listId: message.listId, listTitle: message.listTitle });
+    const listValue = message.listId || message.listTitle || '';
+
+    // Check for "all" selection
+    if (listValue === 'all' || listValue.toLowerCase().includes('tous')) {
       selectedIds = billboards.map(b => b.id);
     } else {
-      selectedIds = [message.listId];
+      // Try to find by ID first
+      const byId = billboards.find(b => b.id === listValue);
+      if (byId) {
+        selectedIds = [byId.id];
+      } else {
+        // Try to match by name (WATI may return the row title)
+        const byName = billboards.find(b =>
+          b.name.toLowerCase() === listValue.toLowerCase() ||
+          b.name.toLowerCase().includes(listValue.toLowerCase()) ||
+          listValue.toLowerCase().includes(b.name.toLowerCase())
+        );
+        if (byName) {
+          selectedIds = [byName.id];
+        }
+      }
     }
   } else {
     // Handle text input - use LLM or simple matching

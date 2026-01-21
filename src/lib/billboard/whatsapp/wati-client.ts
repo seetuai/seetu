@@ -245,16 +245,36 @@ class WatiClient {
    */
   async sendButtons(params: SendButtonParams): Promise<{ success: boolean; messageId?: string }> {
     try {
-      // WATI API requires phone number in URL path
-      const result = await this.request<{ result: boolean; info?: string }>(`/api/v1/sendInteractiveButtonsMessage/${params.phone}`, {
+      console.log('[WATI] Sending buttons to:', params.phone);
+
+      // WATI API uses query parameter for phone number
+      const url = `${this.config.apiUrl}/api/v1/sendInteractiveButtonsMessage?whatsappNumber=${params.phone}`;
+      const body = {
+        body: params.body,
+        buttons: params.buttons.map(b => ({
+          text: b.reply.title,
+        })),
+      };
+
+      const response = await fetch(url, {
         method: 'POST',
-        body: JSON.stringify({
-          body: params.body,
-          buttons: params.buttons,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiToken}`,
+        },
+        body: JSON.stringify(body),
       });
 
-      return { success: result.result, messageId: result.info };
+      const responseText = await response.text();
+      console.log('[WATI] Buttons response:', response.status, responseText);
+
+      const result = responseText ? JSON.parse(responseText) : {};
+
+      if (!response.ok || result.result === false) {
+        throw new Error(result.message || 'Buttons message failed');
+      }
+
+      return { success: true, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send buttons error:', error);
       return { success: false };
@@ -268,14 +288,25 @@ class WatiClient {
     try {
       console.log('[WATI] Sending list to:', params.phone, 'sections:', JSON.stringify(params.sections));
 
-      const url = `${this.config.apiUrl}/api/v1/sendInteractiveListMessage/${params.phone}`;
+      // WATI API uses query parameter for phone number
+      const url = `${this.config.apiUrl}/api/v1/sendInteractiveListMessage?whatsappNumber=${params.phone}`;
+
+      // WATI format: rows only have title and description (no id field in the API)
       const body = {
         header: '',
         body: params.body,
         footer: '',
         buttonText: params.buttonText,
-        sections: params.sections,
+        sections: params.sections.map(section => ({
+          title: section.title,
+          rows: section.rows.map(row => ({
+            title: row.title.substring(0, 24), // Max 24 chars
+            description: row.description?.substring(0, 72) || '', // Max 72 chars
+          })),
+        })),
       };
+
+      console.log('[WATI] List request body:', JSON.stringify(body));
 
       const response = await fetch(url, {
         method: 'POST',
@@ -286,48 +317,54 @@ class WatiClient {
         body: JSON.stringify(body),
       });
 
-      const result = await response.json();
-      console.log('[WATI] List response:', response.status, JSON.stringify(result));
+      const responseText = await response.text();
+      console.log('[WATI] List response:', response.status, responseText);
+
+      const result = responseText ? JSON.parse(responseText) : {};
 
       if (!response.ok || result.result === false) {
-        throw new Error(result.message || 'List message failed');
+        throw new Error(result.message || result.info || 'List message failed');
       }
 
       return { success: true, messageId: result.info };
     } catch (error) {
       console.error('[WATI] Send list error:', error);
-      // Fallback to text message
+      // Fallback to text message with numbered options
       let fallbackMsg = params.body + '\n\n';
       params.sections.forEach(section => {
         section.rows.forEach((row, i) => {
           fallbackMsg += `${i + 1}. ${row.title}\n`;
         });
       });
+      fallbackMsg += '\nRépondez avec le numéro de votre choix.';
       return this.sendMessage({ phone: params.phone, message: fallbackMsg });
     }
   }
 
   /**
    * Send CTA URL button message (for payment links etc)
-   * Note: CTA URL buttons may only work with template messages in some WATI setups
+   * Note: CTA URL buttons require WhatsApp Business API and may need pre-approved templates
    */
   async sendCTAButton(params: SendCTAButtonParams): Promise<{ success: boolean; messageId?: string }> {
     try {
       console.log('[WATI] Sending CTA button to:', params.phone);
 
-      const url = `${this.config.apiUrl}/api/v1/sendInteractiveCTAButtonMessage/${params.phone}`;
+      // WATI API uses query parameter for phone number
+      const url = `${this.config.apiUrl}/api/v1/sendInteractiveCTAButtonMessage?whatsappNumber=${params.phone}`;
       const body = {
-        header: { type: 'Text', text: '' },
+        header: '',
         body: params.body,
         footer: params.footer || '',
         buttons: [
           {
             type: 'url',
-            text: params.buttonText,
+            text: params.buttonText.substring(0, 25), // Max 25 chars
             url: params.url,
           },
         ],
       };
+
+      console.log('[WATI] CTA button request body:', JSON.stringify(body));
 
       const response = await fetch(url, {
         method: 'POST',
@@ -338,11 +375,13 @@ class WatiClient {
         body: JSON.stringify(body),
       });
 
-      const result = await response.json();
-      console.log('[WATI] CTA button response:', response.status, JSON.stringify(result));
+      const responseText = await response.text();
+      console.log('[WATI] CTA button response:', response.status, responseText);
+
+      const result = responseText ? JSON.parse(responseText) : {};
 
       if (!response.ok || result.result === false) {
-        throw new Error(result.message || 'CTA button failed');
+        throw new Error(result.message || result.info || 'CTA button failed');
       }
 
       return { success: true, messageId: result.info };

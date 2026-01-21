@@ -3,10 +3,6 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Server configuration
   serverExternalPackages: ['sharp'],
-  // Enable instrumentation for worker startup
-  experimental: {
-    instrumentationHook: true,
-  },
   images: {
     remotePatterns: [
       {

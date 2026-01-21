@@ -213,7 +213,7 @@ class WatiClient {
         };
       }
 
-      console.log('[WATI] Template request:', params.templateName, JSON.stringify(body));
+      console.log('[WATI] Template request:', params.templateName, JSON.stringify(body, null, 2));
 
       // WATI API - use query param for phone number
       const url = `${this.config.apiUrl}/api/v1/sendTemplateMessage?whatsappNumber=${params.phone}`;
@@ -233,6 +233,15 @@ class WatiClient {
       const result = responseText ? JSON.parse(responseText) : {};
 
       if (!response.ok || result.result === false) {
+        // Log detailed error info
+        console.error('[WATI] Template error details:', {
+          status: response.status,
+          result: result.result,
+          message: result.message,
+          info: result.info,
+          errors: result.errors,
+          fullResponse: result,
+        });
         throw new Error(result.message || result.info || 'Template send failed');
       }
 

@@ -387,7 +387,18 @@ class WatiClient {
         const { billboardName, price, checkoutId } = params.templateParams;
 
         // Extract checkout ID from URL if not provided
-        const finalCheckoutId = checkoutId || params.url.split('/').pop() || '';
+        // Parse URL properly to handle query params - only extract the path segment
+        let finalCheckoutId = checkoutId;
+        if (!finalCheckoutId) {
+          try {
+            const urlObj = new URL(params.url);
+            // Get the last path segment (e.g., "cos-22h31hb801c1e" from "/c/cos-22h31hb801c1e")
+            finalCheckoutId = urlObj.pathname.split('/').pop() || '';
+          } catch {
+            // Fallback to simple split if URL parsing fails
+            finalCheckoutId = params.url.split('/').pop()?.split('?')[0] || '';
+          }
+        }
 
         console.log('[WATI] Sending payment template:', params.templateName, {
           billboardName,

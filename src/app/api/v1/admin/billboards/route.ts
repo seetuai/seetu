@@ -5,24 +5,23 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 
 // Superadmin emails (same pattern as existing admin routes)
 const SUPERADMIN_EMAILS = (process.env.SUPERADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
 
-async function isAdmin(request: NextRequest): Promise<boolean> {
-  const supabase = await createServiceClient();
+async function isAdmin(): Promise<boolean> {
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-
   if (!user?.email) return false;
   return SUPERADMIN_EMAILS.includes(user.email);
 }
 
 export async function GET(request: NextRequest) {
   try {
-    if (!(await isAdmin(request))) {
+    if (!(await isAdmin())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -59,7 +58,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!(await isAdmin(request))) {
+    if (!(await isAdmin())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 

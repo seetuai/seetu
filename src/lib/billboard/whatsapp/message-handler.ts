@@ -432,26 +432,25 @@ async function handleBillboardSelection(
   // Handle list reply (from interactive list)
   if (message.type === 'list_reply' && (message.listId || message.listTitle)) {
     console.log('[WA_HANDLER] List reply received:', { listId: message.listId, listTitle: message.listTitle });
-    const listValue = message.listId || message.listTitle || '';
+
+    // WATI assigns its own IDs (0-0, 0-1) so we must use listTitle for matching
+    const listTitle = message.listTitle || '';
 
     // Check for "all" selection
-    if (listValue === 'all' || listValue.toLowerCase().includes('tous')) {
+    if (listTitle.toLowerCase().includes('tous')) {
       selectedIds = billboards.map(b => b.id);
     } else {
-      // Try to find by ID first
-      const byId = billboards.find(b => b.id === listValue);
-      if (byId) {
-        selectedIds = [byId.id];
+      // Match by name (WATI returns the row title)
+      const byName = billboards.find(b =>
+        b.name.toLowerCase() === listTitle.toLowerCase() ||
+        b.name.toLowerCase().includes(listTitle.toLowerCase()) ||
+        listTitle.toLowerCase().includes(b.name.toLowerCase())
+      );
+      if (byName) {
+        selectedIds = [byName.id];
+        console.log('[WA_HANDLER] Matched billboard by title:', byName.name, byName.id);
       } else {
-        // Try to match by name (WATI may return the row title)
-        const byName = billboards.find(b =>
-          b.name.toLowerCase() === listValue.toLowerCase() ||
-          b.name.toLowerCase().includes(listValue.toLowerCase()) ||
-          listValue.toLowerCase().includes(b.name.toLowerCase())
-        );
-        if (byName) {
-          selectedIds = [byName.id];
-        }
+        console.log('[WA_HANDLER] No billboard matched for title:', listTitle);
       }
     }
   } else {

@@ -500,12 +500,29 @@ class WatiClient {
         const button = body.button as Record<string, string>;
         message.buttonId = button?.payload || button?.id;
         message.buttonText = button?.text;
-      } else if (messageType === 'list_reply' || body.list_reply || body.interactive) {
+      } else if (messageType === 'list_reply' || messageType === 'interactive' || body.list_reply || body.listReply || body.interactive) {
         message.type = 'list_reply';
-        const list = (body.list_reply || body.interactive) as Record<string, unknown>;
-        const nestedList = list?.list_reply as Record<string, string> | undefined;
-        message.listId = list?.id as string || nestedList?.id;
-        message.listTitle = list?.title as string || nestedList?.title;
+        // WATI can send list replies in various formats
+        const list = (body.listReply || body.list_reply || body.interactive) as Record<string, unknown>;
+        const nestedList = (list?.list_reply || list?.listReply) as Record<string, string> | undefined;
+
+        // Try various paths to get the selected item's id and title
+        message.listId =
+          body.selectedId as string ||
+          body.selectedRowId as string ||
+          list?.id as string ||
+          list?.selectedId as string ||
+          nestedList?.id ||
+          nestedList?.selectedId;
+        message.listTitle =
+          body.selectedTitle as string ||
+          body.title as string ||
+          list?.title as string ||
+          list?.selectedTitle as string ||
+          nestedList?.title ||
+          nestedList?.selectedTitle;
+
+        console.log('[WATI] Parsed list reply:', { listId: message.listId, listTitle: message.listTitle, rawList: list });
       }
 
       return message;

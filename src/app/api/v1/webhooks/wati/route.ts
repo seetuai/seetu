@@ -63,9 +63,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Log only non-sensitive fields (no phone numbers or message content)
+    // Log event info for debugging
     const eventType = body.eventType || body.type || 'unknown';
-    console.log('[WATI_WEBHOOK] Received event type:', eventType);
+    const messageType = body.messageType || body.type;
+    console.log('[WATI_WEBHOOK] Received:', { eventType, messageType, hasListReply: !!body.listReply, hasInteractive: !!body.interactive });
+
+    // Log full payload for interactive/list messages to debug
+    if (body.listReply || body.interactive || body.list_reply || messageType === 'interactive' || messageType === 'list_reply') {
+      console.log('[WATI_WEBHOOK] Interactive payload:', JSON.stringify(body, null, 2));
+    }
 
     // IMPORTANT: Ignore outgoing message notifications to prevent infinite loops
     // WATI sends webhooks for messages WE send (sessionMessageSent, templateMessageSent, etc.)
@@ -82,8 +88,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true, ignored: 'outgoing_message' });
     }
 
-    // Only process incoming messages (type: 'message' or similar)
-    if (eventType !== 'message' && eventType !== 'unknown') {
+    // Process incoming messages - allow various event types that contain user messages
+    const validIncomingTypes = ['message', 'unknown', 'interactive', 'list_reply', 'button_reply'];
+    if (!validIncomingTypes.includes(eventType as string)) {
       console.log('[WATI_WEBHOOK] Non-message event, ignoring:', eventType);
       return NextResponse.json({ received: true });
     }

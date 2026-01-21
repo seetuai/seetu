@@ -68,6 +68,7 @@ export interface SendCTAButtonParams {
     billboardName?: string;
     price?: string;
     checkoutId?: string;
+    paymentId?: string; // Used with redirect-based template
   };
 }
 
@@ -381,38 +382,23 @@ class WatiClient {
   async sendCTAButton(params: SendCTAButtonParams): Promise<{ success: boolean; messageId?: string }> {
     console.log('[WATI] Sending payment link to:', params.phone);
 
-    // Skip template for now - WhatsApp URL-encodes query params in CTA buttons
-    // which breaks Wave checkout URLs that need ?a=X&c=XOF&m=Y
-    // Use text message with clickable link instead (this was working before)
-    const useTemplate = false;
-
     // Try template if available
-    if (useTemplate && params.templateName && params.templateParams) {
+    if (params.templateName && params.templateParams) {
       try {
-        const { billboardName, price, checkoutId } = params.templateParams;
+        const { billboardName, price, paymentId } = params.templateParams;
 
-        // Extract checkout path from URL if not provided
-        // Wave URL format: https://pay.wave.com/c/{session_id}?a={amount}&c={currency}&m={merchant}
-        // We need both the session ID AND query params for checkout to work
-        let finalCheckoutId = checkoutId;
-        if (!finalCheckoutId) {
-          try {
-            const urlObj = new URL(params.url);
-            // Get path segment + query string (e.g., "cos-22h31hb801c1e?a=50&c=XOF&m=Andakia")
-            const pathSegment = urlObj.pathname.split('/').pop() || '';
-            const queryString = urlObj.search; // includes the '?'
-            finalCheckoutId = pathSegment + queryString;
-          } catch {
-            // Fallback to simple extraction after /c/
-            const match = params.url.match(/\/c\/(.+)$/);
-            finalCheckoutId = match ? match[1] : params.url.split('/').pop() || '';
-          }
+        // Use paymentId for the redirect-based template
+        // Template URL should be: https://seetu.ai/api/v1/pay/{{3}}
+        // This redirects to the full Wave checkout URL, avoiding URL encoding issues
+        if (!paymentId) {
+          console.warn('[WATI] No paymentId provided for template, falling back to text');
+          throw new Error('paymentId required for template');
         }
 
         console.log('[WATI] Sending payment template:', params.templateName, {
           billboardName,
           price,
-          checkoutId: finalCheckoutId,
+          paymentId,
         });
 
         const result = await this.sendTemplate({
@@ -421,7 +407,7 @@ class WatiClient {
           parameters: {
             '1': billboardName || '',
             '2': price || '',
-            '3': finalCheckoutId,
+            '3': paymentId,
           },
         });
 

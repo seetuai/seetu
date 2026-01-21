@@ -510,17 +510,20 @@ async function handleBillboardSelection(
       (pricing.discount > 0 ? ` (${pricing.discountReason})` : '');
 
     // Send CTA button for payment (uses approved template)
+    // Template URL should be: https://seetu.ai/api/v1/pay/{{3}}
+    // This redirects to Wave checkout, avoiding URL encoding issues
     await wati.sendCTAButton({
       phone: message.phone,
       body: recapBody,
       footer: 'Paiement sécurisé via Wave',
       buttonText: 'Payer maintenant',
       url: payment.checkoutUrl,
-      // Use approved WATI template with CTA button
-      templateName: 'billboard_payment',
+      // Use WATI template with CTA button - needs redirect URL template
+      templateName: 'billboard_payment_v2',
       templateParams: {
         billboardName: billboardNames,
         price: pricing.totalCfa.toString(),
+        paymentId: payment.id,
       },
     });
 

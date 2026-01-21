@@ -50,6 +50,7 @@ export default function ContentLibraryPage() {
     ready: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100' },
     processing: { icon: Clock, color: 'text-amber-600', bg: 'bg-amber-100' },
     rejected: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-100' },
+    pending: { icon: AlertCircle, color: 'text-slate-600', bg: 'bg-slate-100' },
   };
 
   return (

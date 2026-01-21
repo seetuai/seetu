@@ -62,6 +62,13 @@ export interface SendCTAButtonParams {
   footer?: string;
   buttonText: string;
   url: string;
+  // Template parameters for CTA button template
+  templateName?: string;
+  templateParams?: {
+    billboardName?: string;
+    price?: string;
+    checkoutId?: string;
+  };
 }
 
 export interface WatiContact {
@@ -343,14 +350,45 @@ class WatiClient {
 
   /**
    * Send CTA URL button message (for payment links etc)
-   * Note: WhatsApp CTA URL buttons typically require approved templates
-   * Falls back to formatted text message with link
+   * Uses approved template with CTA button, falls back to text if template fails
    */
   async sendCTAButton(params: SendCTAButtonParams): Promise<{ success: boolean; messageId?: string }> {
     console.log('[WATI] Sending payment link to:', params.phone);
 
-    // WhatsApp CTA URL buttons require pre-approved templates
-    // Send a well-formatted message with the payment link instead
+    // Try template if available
+    if (params.templateName && params.templateParams) {
+      try {
+        const { billboardName, price, checkoutId } = params.templateParams;
+
+        // Extract checkout ID from URL if not provided
+        const finalCheckoutId = checkoutId || params.url.split('/').pop() || '';
+
+        console.log('[WATI] Sending payment template:', params.templateName, {
+          billboardName,
+          price,
+          checkoutId: finalCheckoutId,
+        });
+
+        const result = await this.sendTemplate({
+          phone: params.phone,
+          templateName: params.templateName,
+          parameters: {
+            '1': billboardName || '',
+            '2': price || '',
+            '3': finalCheckoutId,
+          },
+        });
+
+        if (result.success) {
+          return result;
+        }
+        console.warn('[WATI] Template failed, falling back to text');
+      } catch (error) {
+        console.error('[WATI] Template error:', error);
+      }
+    }
+
+    // Fallback to formatted text message
     const message = `${params.body}\n\n` +
       `━━━━━━━━━━━━━━━\n` +
       `💳 *${params.buttonText}*\n` +

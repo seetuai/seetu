@@ -509,13 +509,19 @@ async function handleBillboardSelection(
       `💰 Total: ${pricing.totalCfa} F CFA` +
       (pricing.discount > 0 ? ` (${pricing.discountReason})` : '');
 
-    // Send CTA button for payment
+    // Send CTA button for payment (uses approved template)
     await wati.sendCTAButton({
       phone: message.phone,
       body: recapBody,
       footer: 'Paiement sécurisé via Wave',
-      buttonText: '💳 Payer maintenant',
+      buttonText: 'Payer maintenant',
       url: payment.checkoutUrl,
+      // Use approved WATI template with CTA button
+      templateName: 'billboard_payment',
+      templateParams: {
+        billboardName: billboardNames,
+        price: pricing.totalCfa.toString(),
+      },
     });
 
     return { success: true };

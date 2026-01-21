@@ -518,8 +518,8 @@ async function handleBillboardSelection(
       footer: 'Paiement sécurisé via Wave',
       buttonText: 'Payer maintenant',
       url: payment.checkoutUrl,
-      // Use WATI template with CTA button - needs redirect URL template
-      templateName: 'billboard_payment_v2',
+      // Use WATI template with CTA button (URL: https://seetu.ai/api/v1/pay/{{3}})
+      templateName: 'billboard_payment',
       templateParams: {
         billboardName: billboardNames,
         price: pricing.totalCfa.toString(),

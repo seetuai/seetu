@@ -343,22 +343,27 @@ class WatiClient {
 
   /**
    * Send CTA URL button message (for payment links etc)
-   * Note: CTA URL buttons require WhatsApp Business API and may need pre-approved templates
+   * Uses WATI's sendInteractiveButtonsMessage with URL button type
    */
   async sendCTAButton(params: SendCTAButtonParams): Promise<{ success: boolean; messageId?: string }> {
     try {
       console.log('[WATI] Sending CTA button to:', params.phone);
 
-      // WATI API uses query parameter for phone number
-      const url = `${this.config.apiUrl}/api/v1/sendInteractiveCTAButtonMessage?whatsappNumber=${params.phone}`;
+      // WATI API endpoint for interactive buttons (supports URL type)
+      const url = `${this.config.apiUrl}/api/v1/sendInteractiveButtonsMessage?whatsappNumber=${params.phone}`;
+
+      // WATI format for URL button
       const body = {
-        header: '',
+        header: {
+          type: 'Text',
+          text: '',
+        },
         body: params.body,
         footer: params.footer || '',
         buttons: [
           {
             type: 'url',
-            text: params.buttonText.substring(0, 25), // Max 25 chars
+            text: params.buttonText.substring(0, 20), // Max 20 chars for buttons
             url: params.url,
           },
         ],

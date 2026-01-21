@@ -386,17 +386,21 @@ class WatiClient {
       try {
         const { billboardName, price, checkoutId } = params.templateParams;
 
-        // Extract checkout ID from URL if not provided
-        // Parse URL properly to handle query params - only extract the path segment
+        // Extract checkout path from URL if not provided
+        // Wave URL format: https://pay.wave.com/c/{session_id}?a={amount}&c={currency}&m={merchant}
+        // We need both the session ID AND query params for checkout to work
         let finalCheckoutId = checkoutId;
         if (!finalCheckoutId) {
           try {
             const urlObj = new URL(params.url);
-            // Get the last path segment (e.g., "cos-22h31hb801c1e" from "/c/cos-22h31hb801c1e")
-            finalCheckoutId = urlObj.pathname.split('/').pop() || '';
+            // Get path segment + query string (e.g., "cos-22h31hb801c1e?a=50&c=XOF&m=Andakia")
+            const pathSegment = urlObj.pathname.split('/').pop() || '';
+            const queryString = urlObj.search; // includes the '?'
+            finalCheckoutId = pathSegment + queryString;
           } catch {
-            // Fallback to simple split if URL parsing fails
-            finalCheckoutId = params.url.split('/').pop()?.split('?')[0] || '';
+            // Fallback to simple extraction after /c/
+            const match = params.url.match(/\/c\/(.+)$/);
+            finalCheckoutId = match ? match[1] : params.url.split('/').pop() || '';
           }
         }
 

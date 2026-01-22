@@ -6,13 +6,20 @@
 
 import { v2 as cloudinary } from 'cloudinary';
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true,
-});
+// Lazy configuration - ensures env vars are loaded
+let configured = false;
+
+function ensureConfigured() {
+  if (!configured) {
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+      secure: true,
+    });
+    configured = true;
+  }
+}
 
 export interface TransformOptions {
   width?: number;
@@ -47,6 +54,7 @@ export async function uploadBillboardMedia(
     targetHeight?: number;
   }
 ): Promise<UploadResult> {
+  ensureConfigured();
   const { contentId, mediaType, targetWidth = 1920, targetHeight = 1080 } = options;
 
   try {
@@ -159,6 +167,7 @@ export async function imageToVideo(
     targetHeight?: number;
   }
 ): Promise<UploadResult> {
+  ensureConfigured();
   const { contentId, duration = 10, targetWidth = 1920, targetHeight = 1080 } = options;
 
   try {
@@ -227,6 +236,7 @@ export async function imageToVideo(
  * Delete media from Cloudinary
  */
 export async function deleteMedia(publicId: string, resourceType: 'image' | 'video' = 'image'): Promise<boolean> {
+  ensureConfigured();
   try {
     await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
     return true;

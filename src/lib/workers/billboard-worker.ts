@@ -196,6 +196,29 @@ async function processTranscoding(
       data: { status: 'processing' },
     });
 
+    // Check if FFmpeg is available
+    const ffmpegAvailable = await checkFfmpeg();
+
+    if (!ffmpegAvailable) {
+      // FFmpeg not installed - skip transcoding, use original file
+      console.log(`[BILLBOARD_WORKER] FFmpeg not available, skipping transcoding for: ${contentId}`);
+
+      await prisma.billboardContent.update({
+        where: { id: contentId },
+        data: {
+          status: 'ready',
+          processedUrls: {
+            original: originalUrl,
+            thumbnail: originalUrl, // Use original as thumbnail for images
+          },
+          durationSeconds: mediaType === 'video' ? 30 : 10,
+        },
+      });
+
+      console.log(`[BILLBOARD_WORKER] Content ready (no transcoding): ${contentId}`);
+      return;
+    }
+
     let result;
 
     if (mediaType === 'video') {
@@ -240,13 +263,36 @@ async function processTranscoding(
   } catch (error) {
     console.error(`[BILLBOARD_WORKER] Transcoding error:`, error);
 
+    // If transcoding fails, still mark as ready with original file
+    // Better to show something than nothing
+    console.log(`[BILLBOARD_WORKER] Falling back to original file: ${contentId}`);
+
     await prisma.billboardContent.update({
       where: { id: contentId },
       data: {
-        status: 'rejected',
-        rejectionReason: `Transcoding failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        status: 'ready',
+        processedUrls: {
+          original: originalUrl,
+          thumbnail: originalUrl,
+        },
+        durationSeconds: mediaType === 'video' ? 30 : 10,
       },
     });
+  }
+}
+
+/**
+ * Check if FFmpeg is available
+ */
+async function checkFfmpeg(): Promise<boolean> {
+  try {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    await execAsync('ffmpeg -version');
+    return true;
+  } catch {
+    return false;
   }
 }
 

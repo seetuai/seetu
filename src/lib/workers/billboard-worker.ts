@@ -16,7 +16,8 @@ import {
 } from '../queues/billboard-queue';
 import { validateMedia } from '../billboard/validation';
 import { moderateImage, moderateVideo } from '../billboard/moderation';
-import { transcodeVideo, imageToVideo, RESOLUTIONS } from '../billboard/transcoding';
+import { transcodeVideo, imageToVideo as ffmpegImageToVideo, RESOLUTIONS } from '../billboard/transcoding';
+import { uploadBillboardMedia, imageToVideo as cloudinaryImageToVideo, isCloudinaryConfigured } from '../cloudinary';
 import { prisma } from '../prisma';
 import { ContentStatus } from '@prisma/client';
 
@@ -183,8 +184,6 @@ async function processTranscoding(
     mediaType,
     targetWidth,
     targetHeight,
-    addOverlay,
-    overlayPath,
   } = data;
 
   console.log(`[BILLBOARD_WORKER] Transcoding content: ${contentId}`);
@@ -196,75 +195,114 @@ async function processTranscoding(
       data: { status: 'processing' },
     });
 
-    // Check if FFmpeg is available
-    const ffmpegAvailable = await checkFfmpeg();
+    // Try Cloudinary first (recommended for production)
+    if (isCloudinaryConfigured()) {
+      console.log(`[BILLBOARD_WORKER] Using Cloudinary for processing: ${contentId}`);
 
-    if (!ffmpegAvailable) {
-      // FFmpeg not installed - skip transcoding, use original file
-      console.log(`[BILLBOARD_WORKER] FFmpeg not available, skipping transcoding for: ${contentId}`);
-
-      await prisma.billboardContent.update({
-        where: { id: contentId },
-        data: {
-          status: 'ready',
-          processedUrls: {
-            original: originalUrl,
-            thumbnail: originalUrl, // Use original as thumbnail for images
-          },
-          durationSeconds: mediaType === 'video' ? 30 : 10,
-        },
-      });
-
-      console.log(`[BILLBOARD_WORKER] Content ready (no transcoding): ${contentId}`);
-      return;
-    }
-
-    let result;
-
-    if (mediaType === 'video') {
-      result = await transcodeVideo(originalUrl, {
-        targetWidth,
-        targetHeight,
-        overlayPath: addOverlay ? overlayPath : undefined,
-        generateThumbnail: true,
-      });
-    } else {
-      // Convert image to video with Ken Burns effect
-      result = await imageToVideo(
-        originalUrl,
-        {
+      let result;
+      if (mediaType === 'video') {
+        result = await uploadBillboardMedia(originalUrl, {
+          contentId,
+          mediaType: 'video',
           targetWidth,
           targetHeight,
-          overlayPath: addOverlay ? overlayPath : undefined,
+        });
+      } else {
+        // For images, use Cloudinary's image processing
+        result = await uploadBillboardMedia(originalUrl, {
+          contentId,
+          mediaType: 'image',
+          targetWidth,
+          targetHeight,
+        });
+      }
+
+      if (result.success) {
+        await prisma.billboardContent.update({
+          where: { id: contentId },
+          data: {
+            status: 'ready',
+            processedUrls: {
+              url: result.secureUrl,
+              thumbnail: result.thumbnailUrl,
+              publicId: result.publicId,
+            },
+            durationSeconds: result.duration ? Math.round(result.duration) : (mediaType === 'video' ? 30 : 10),
+          },
+        });
+
+        console.log(`[BILLBOARD_WORKER] Cloudinary processing complete: ${contentId}`);
+        return;
+      }
+
+      console.warn(`[BILLBOARD_WORKER] Cloudinary failed, trying fallback: ${result.error}`);
+    }
+
+    // Fallback: Check if FFmpeg is available locally
+    const ffmpegAvailable = await checkFfmpeg();
+
+    if (ffmpegAvailable) {
+      console.log(`[BILLBOARD_WORKER] Using FFmpeg for processing: ${contentId}`);
+
+      let result;
+      if (mediaType === 'video') {
+        result = await transcodeVideo(originalUrl, {
+          targetWidth,
+          targetHeight,
           generateThumbnail: true,
-        },
-        10 // 10 second display duration
-      );
+        });
+      } else {
+        result = await ffmpegImageToVideo(
+          originalUrl,
+          {
+            targetWidth,
+            targetHeight,
+            generateThumbnail: true,
+          },
+          10
+        );
+      }
+
+      if (result.success) {
+        await prisma.billboardContent.update({
+          where: { id: contentId },
+          data: {
+            status: 'ready',
+            processedUrls: {
+              mp4: result.videoUrl,
+              thumbnail: result.thumbnailUrl,
+            },
+            durationSeconds: result.duration ? Math.round(result.duration) : 10,
+          },
+        });
+
+        console.log(`[BILLBOARD_WORKER] FFmpeg transcoding complete: ${contentId}`);
+        return;
+      }
+
+      console.warn(`[BILLBOARD_WORKER] FFmpeg failed: ${result.error}`);
     }
 
-    if (!result.success) {
-      throw new Error(result.error || 'Transcoding failed');
-    }
+    // Final fallback: use original file as-is
+    console.log(`[BILLBOARD_WORKER] No processing available, using original file: ${contentId}`);
 
-    // Update with processed URLs
     await prisma.billboardContent.update({
       where: { id: contentId },
       data: {
         status: 'ready',
         processedUrls: {
-          mp4: result.videoUrl,
-          thumbnail: result.thumbnailUrl,
+          original: originalUrl,
+          thumbnail: originalUrl,
         },
-        durationSeconds: result.duration ? Math.round(result.duration) : 10,
+        durationSeconds: mediaType === 'video' ? 30 : 10,
       },
     });
 
-    console.log(`[BILLBOARD_WORKER] Transcoding complete: ${contentId}`);
+    console.log(`[BILLBOARD_WORKER] Content ready (no processing): ${contentId}`);
   } catch (error) {
     console.error(`[BILLBOARD_WORKER] Transcoding error:`, error);
 
-    // If transcoding fails, still mark as ready with original file
-    // Better to show something than nothing
+    // If all processing fails, still mark as ready with original file
     console.log(`[BILLBOARD_WORKER] Falling back to original file: ${contentId}`);
 
     await prisma.billboardContent.update({

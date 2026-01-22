@@ -7,8 +7,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getWaveClient } from '@/lib/wave';
-import { processPaymentSuccess, processPaymentFailure, getPayment } from '@/lib/billboard/payments';
+import { processPaymentSuccess, processPaymentFailure } from '@/lib/billboard/payments';
 import { onPaymentComplete } from '@/lib/billboard/whatsapp/message-handler';
+
+// WhatsApp bot number for redirects
+const WHATSAPP_BOT_NUMBER = process.env.WHATSAPP_BOT_NUMBER || '221781362728';
 
 // Handle redirect callbacks (success/error URLs from Wave)
 export async function GET(request: NextRequest) {
@@ -25,8 +28,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/billboards`);
   }
 
-  // Get payment details
-  const payment = await getPayment(paymentId);
+  // Get payment details with whatsappPhone
+  const payment = await getPaymentWithPhone(paymentId);
 
   if (!payment) {
     console.error('[BILLBOARD_PAYMENT_WEBHOOK] Payment not found:', paymentId);
@@ -54,20 +57,36 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        // Redirect to WhatsApp if user came from bot, otherwise to web
+        if (payment.whatsappPhone) {
+          // Redirect back to WhatsApp chat with the bot
+          const whatsappUrl = `https://wa.me/${WHATSAPP_BOT_NUMBER}?text=Paiement%20confirmé%20✓`;
+          return NextResponse.redirect(whatsappUrl);
+        }
+
         // Redirect to success page (for web users)
         return NextResponse.redirect(
           `${baseUrl}/billboards/my-content?payment=success&id=${payment.contentId}`
         );
       } else {
         console.log('[BILLBOARD_PAYMENT_WEBHOOK] Wave payment not yet completed:', paymentId);
-        // Payment might still be processing, redirect to pending page
+        // Payment might still be processing
+        if (payment.whatsappPhone) {
+          return NextResponse.redirect(
+            `https://wa.me/${WHATSAPP_BOT_NUMBER}?text=Paiement%20en%20cours...`
+          );
+        }
         return NextResponse.redirect(
           `${baseUrl}/billboards/my-content/${payment.contentId}?payment=pending`
         );
       }
     } catch (error) {
       console.error('[BILLBOARD_PAYMENT_WEBHOOK] Wave verification error:', error);
-      // On error, still redirect but with error status
+      if (payment.whatsappPhone) {
+        return NextResponse.redirect(
+          `https://wa.me/${WHATSAPP_BOT_NUMBER}?text=Erreur%20paiement`
+        );
+      }
       return NextResponse.redirect(
         `${baseUrl}/billboards/my-content/${payment.contentId}?payment=error`
       );
@@ -76,12 +95,20 @@ export async function GET(request: NextRequest) {
     // Payment failed
     await processPaymentFailure(paymentId);
     console.log('[BILLBOARD_PAYMENT_WEBHOOK] Payment failed:', paymentId);
+    if (payment.whatsappPhone) {
+      return NextResponse.redirect(
+        `https://wa.me/${WHATSAPP_BOT_NUMBER}?text=Paiement%20échoué`
+      );
+    }
     return NextResponse.redirect(
       `${baseUrl}/billboards/my-content/${payment.contentId}?payment=failed`
     );
   }
 
   // Default redirect
+  if (payment.whatsappPhone) {
+    return NextResponse.redirect(`https://wa.me/${WHATSAPP_BOT_NUMBER}`);
+  }
   return NextResponse.redirect(`${baseUrl}/billboards/my-content`);
 }
 
@@ -129,5 +156,19 @@ async function findPaymentByExternalRef(externalRef: string) {
   return prisma.billboardPayment.findFirst({
     where: { externalRef },
     select: { id: true, contentId: true },
+  });
+}
+
+// Helper to get payment with whatsappPhone
+async function getPaymentWithPhone(paymentId: string) {
+  const { prisma } = await import('@/lib/prisma');
+  return prisma.billboardPayment.findUnique({
+    where: { id: paymentId },
+    select: {
+      id: true,
+      contentId: true,
+      externalRef: true,
+      whatsappPhone: true,
+    },
   });
 }

@@ -1,6 +1,7 @@
 /**
  * Batch Queue for Background Processing
  * Uses BullMQ with Redis for job management
+ * Updated: queue names use hyphens (no colons)
  */
 
 import { Queue, QueueEvents } from 'bullmq';

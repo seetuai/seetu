@@ -114,7 +114,7 @@ export default function ContentLibraryPage() {
 
           return (
             <div key={item.id} className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden hover:border-red-300 transition-colors">
-              <div className="aspect-[9/16] bg-slate-900 relative flex items-center justify-center overflow-hidden">
+              <div className="aspect-[1/2] bg-slate-900 relative flex items-center justify-center overflow-hidden">
                 {(() => {
                   // Use processed URL if available, fallback to original
                   const mediaUrl = item.processedUrls?.url || item.processedUrls?.thumbnail || item.originalUrl;

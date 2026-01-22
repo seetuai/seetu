@@ -55,7 +55,8 @@ export async function uploadBillboardMedia(
   }
 ): Promise<UploadResult> {
   ensureConfigured();
-  const { contentId, mediaType, targetWidth = 1920, targetHeight = 1080 } = options;
+  // Default to portrait 1:2 ratio for billboards (1m x 2m)
+  const { contentId, mediaType, targetWidth = 1080, targetHeight = 2160 } = options;
 
   try {
     console.log(`[CLOUDINARY] Uploading ${mediaType}: ${contentId}`);
@@ -80,10 +81,10 @@ export async function uploadBillboardMedia(
           },
         ],
         eager: [
-          // Generate thumbnail
+          // Generate thumbnail (portrait 1:2 ratio)
           {
-            width: 400,
-            height: 225,
+            width: 225,
+            height: 450,
             crop: 'pad',
             background: 'black',
             format: 'jpg',
@@ -128,11 +129,12 @@ export async function uploadBillboardMedia(
 
       console.log(`[CLOUDINARY] Image uploaded: ${result.public_id}`);
 
-      // Generate thumbnail URL
+      // Generate thumbnail URL (portrait 1:2 ratio)
       const thumbnailUrl = cloudinary.url(result.public_id, {
-        width: 400,
-        height: 225,
-        crop: 'fill',
+        width: 225,
+        height: 450,
+        crop: 'pad',
+        background: 'black',
         format: 'jpg',
         quality: 'auto',
       });
@@ -171,7 +173,8 @@ export async function imageToVideo(
   }
 ): Promise<UploadResult> {
   ensureConfigured();
-  const { contentId, duration = 10, targetWidth = 1920, targetHeight = 1080 } = options;
+  // Default to portrait 1:2 ratio for billboards (1m x 2m)
+  const { contentId, duration = 10, targetWidth = 1080, targetHeight = 2160 } = options;
 
   try {
     console.log(`[CLOUDINARY] Converting image to video: ${contentId}`);
@@ -207,8 +210,8 @@ export async function imageToVideo(
     // requires the video API which has different pricing
     // The billboard player can handle images directly
     const thumbnailUrl = cloudinary.url(imageResult.public_id, {
-      width: 400,
-      height: 225,
+      width: 225,
+      height: 450,
       crop: 'pad',
       background: 'black',
       format: 'jpg',
@@ -261,7 +264,8 @@ export function getBillboardUrl(
     format?: string;
   } = {}
 ): string {
-  const { width = 1920, height = 1080, format = 'auto' } = options;
+  // Default to portrait 1:2 ratio for billboards (1m x 2m)
+  const { width = 1080, height = 2160, format = 'auto' } = options;
 
   return cloudinary.url(publicId, {
     width,

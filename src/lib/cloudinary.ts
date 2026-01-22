@@ -62,6 +62,7 @@ export async function uploadBillboardMedia(
 
     if (mediaType === 'video') {
       // Upload and transform video
+      // Use 'pad' to preserve entire content (no cropping), add black bars if needed
       const result = await cloudinary.uploader.upload(fileUrl, {
         resource_type: 'video',
         public_id: `billboard/${contentId}`,
@@ -70,8 +71,8 @@ export async function uploadBillboardMedia(
           {
             width: targetWidth,
             height: targetHeight,
-            crop: 'fill',
-            gravity: 'center',
+            crop: 'pad',
+            background: 'black',
           },
           {
             quality: 'auto',
@@ -83,7 +84,8 @@ export async function uploadBillboardMedia(
           {
             width: 400,
             height: 225,
-            crop: 'fill',
+            crop: 'pad',
+            background: 'black',
             format: 'jpg',
           },
         ],
@@ -105,6 +107,7 @@ export async function uploadBillboardMedia(
       };
     } else {
       // Upload and transform image
+      // Use 'pad' to preserve entire content (no cropping), add black bars if needed
       const result = await cloudinary.uploader.upload(fileUrl, {
         resource_type: 'image',
         public_id: `billboard/${contentId}`,
@@ -113,8 +116,8 @@ export async function uploadBillboardMedia(
           {
             width: targetWidth,
             height: targetHeight,
-            crop: 'fill',
-            gravity: 'auto', // Smart cropping
+            crop: 'pad',
+            background: 'black',
           },
           {
             quality: 'auto:best',
@@ -189,8 +192,8 @@ export async function imageToVideo(
         {
           width: targetWidth,
           height: targetHeight,
-          crop: 'fill',
-          gravity: 'center',
+          crop: 'pad',
+          background: 'black',
         },
         // Add slight zoom effect (Ken Burns)
         {
@@ -206,7 +209,8 @@ export async function imageToVideo(
     const thumbnailUrl = cloudinary.url(imageResult.public_id, {
       width: 400,
       height: 225,
-      crop: 'fill',
+      crop: 'pad',
+      background: 'black',
       format: 'jpg',
     });
 

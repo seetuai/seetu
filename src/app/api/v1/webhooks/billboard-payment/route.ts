@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
         // Redirect to WhatsApp if user came from bot, otherwise to web
         if (payment.whatsappPhone) {
           // Redirect back to WhatsApp chat with the bot
-          const whatsappUrl = `https://wa.me/${WHATSAPP_BOT_NUMBER}?text=Paiement%20confirmé%20✓`;
+          const whatsappUrl = `https://wa.me/${WHATSAPP_BOT_NUMBER}`;
           return NextResponse.redirect(whatsappUrl);
         }
 
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         // Payment might still be processing
         if (payment.whatsappPhone) {
           return NextResponse.redirect(
-            `https://wa.me/${WHATSAPP_BOT_NUMBER}?text=Paiement%20en%20cours...`
+            `https://wa.me/${WHATSAPP_BOT_NUMBER}`
           );
         }
         return NextResponse.redirect(
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
       console.error('[BILLBOARD_PAYMENT_WEBHOOK] Wave verification error:', error);
       if (payment.whatsappPhone) {
         return NextResponse.redirect(
-          `https://wa.me/${WHATSAPP_BOT_NUMBER}?text=Erreur%20paiement`
+          `https://wa.me/${WHATSAPP_BOT_NUMBER}`
         );
       }
       return NextResponse.redirect(
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     console.log('[BILLBOARD_PAYMENT_WEBHOOK] Payment failed:', paymentId);
     if (payment.whatsappPhone) {
       return NextResponse.redirect(
-        `https://wa.me/${WHATSAPP_BOT_NUMBER}?text=Paiement%20échoué`
+        `https://wa.me/${WHATSAPP_BOT_NUMBER}`
       );
     }
     return NextResponse.redirect(

@@ -115,15 +115,18 @@ export default function ContentLibraryPage() {
           return (
             <div key={item.id} className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden hover:border-red-300 transition-colors">
               <div className="aspect-[9/16] bg-slate-900 relative flex items-center justify-center overflow-hidden">
-                {item.originalUrl ? (
-                  item.mediaType === 'video' ? (
-                    <video src={item.originalUrl} className="w-full h-full object-cover" muted />
+                {(() => {
+                  // Use processed URL if available, fallback to original
+                  const mediaUrl = item.processedUrls?.url || item.processedUrls?.thumbnail || item.originalUrl;
+                  if (!mediaUrl) {
+                    return item.mediaType === 'video' ? <Play className="h-12 w-12 text-white/30" /> : <Image className="h-12 w-12 text-white/30" />;
+                  }
+                  return item.mediaType === 'video' ? (
+                    <video src={mediaUrl} className="w-full h-full object-contain" muted />
                   ) : (
-                    <img src={item.originalUrl} alt="" className="w-full h-full object-cover" />
-                  )
-                ) : (
-                  item.mediaType === 'video' ? <Play className="h-12 w-12 text-white/30" /> : <Image className="h-12 w-12 text-white/30" />
-                )}
+                    <img src={mediaUrl} alt="" className="w-full h-full object-contain" />
+                  );
+                })()}
                 {item.durationSeconds && (
                   <span className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
                     {item.durationSeconds}s

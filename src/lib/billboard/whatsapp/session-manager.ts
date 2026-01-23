@@ -392,50 +392,76 @@ export async function addPendingMedia(
   phone: string,
   media: Omit<PendingMedia, 'receivedAt'> & { receivedAt: Date }
 ): Promise<PendingMedia[]> {
-  // Use interactive transaction with row locking to prevent race condition
-  // when multiple images arrive simultaneously
-  const result = await prisma.$transaction(async (tx) => {
-    // Lock the row for update using raw query
-    // This ensures only one concurrent call can modify pendingMedia at a time
-    // Note: Table name is "whatsapp_sessions" as defined by @@map in schema
-    await tx.$queryRaw`SELECT id FROM whatsapp_sessions WHERE phone = ${phone} FOR UPDATE`;
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 100;
 
-    const current = await tx.whatsAppSession.findUnique({
-      where: { phone },
-    });
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // Use interactive transaction with row locking to prevent race condition
+      // when multiple images arrive simultaneously
+      const result = await prisma.$transaction(async (tx) => {
+        // Lock the row for update using raw query
+        // This ensures only one concurrent call can modify pendingMedia at a time
+        // Note: Table name is "whatsapp_sessions" as defined by @@map in schema
+        await tx.$queryRaw`SELECT id FROM whatsapp_sessions WHERE phone = ${phone} FOR UPDATE`;
 
-    const currentData = (current?.sessionData as SessionData) || {};
-    const pendingMedia = currentData.pendingMedia || [];
+        const current = await tx.whatsAppSession.findUnique({
+          where: { phone },
+        });
 
-    // Add new media to the pending list (convert Date to ISO string for JSON storage)
-    const newMedia: PendingMedia = {
-      ...media,
-      receivedAt: media.receivedAt.toISOString(),
-    };
-    pendingMedia.push(newMedia);
+        const currentData = (current?.sessionData as SessionData) || {};
+        const pendingMedia = currentData.pendingMedia || [];
 
-    // Set batchStartedAt if this is the first media in the batch (ISO string for JSON storage)
-    const batchStartedAt = currentData.batchStartedAt || new Date().toISOString();
+        // Add new media to the pending list (convert Date to ISO string for JSON storage)
+        const newMedia: PendingMedia = {
+          ...media,
+          receivedAt: media.receivedAt.toISOString(),
+        };
+        pendingMedia.push(newMedia);
 
-    await tx.whatsAppSession.update({
-      where: { phone },
-      data: {
-        sessionData: {
-          ...currentData,
-          pendingMedia,
-          batchStartedAt,
-        } as unknown as JsonSessionData,
-      },
-    });
+        // Set batchStartedAt if this is the first media in the batch (ISO string for JSON storage)
+        const batchStartedAt = currentData.batchStartedAt || new Date().toISOString();
 
-    return pendingMedia;
-  }, {
-    isolationLevel: 'Serializable', // Strongest isolation to prevent race conditions
-    timeout: 10000, // 10 second timeout
-  });
+        await tx.whatsAppSession.update({
+          where: { phone },
+          data: {
+            sessionData: {
+              ...currentData,
+              pendingMedia,
+              batchStartedAt,
+            } as unknown as JsonSessionData,
+          },
+        });
 
-  console.log(`[SESSION_MANAGER] Added pending media for ${phone}, total count: ${result.length}`);
-  return result;
+        return pendingMedia;
+      }, {
+        timeout: 10000, // 10 second timeout
+      });
+
+      console.log(`[SESSION_MANAGER] Added pending media for ${phone}, total count: ${result.length}`);
+      return result;
+    } catch (error) {
+      // Check if it's a serialization failure (P2010 with code 40001)
+      const isSerializationError =
+        error instanceof Error &&
+        'code' in error &&
+        (error as { code: string }).code === 'P2010';
+
+      if (isSerializationError && attempt < MAX_RETRIES) {
+        // Wait with exponential backoff + jitter before retrying
+        const delay = RETRY_DELAY_MS * attempt + Math.random() * 50;
+        console.log(`[SESSION_MANAGER] Serialization conflict for ${phone}, retry ${attempt}/${MAX_RETRIES} after ${Math.round(delay)}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      // Re-throw if not a serialization error or max retries reached
+      throw error;
+    }
+  }
+
+  // This should never be reached, but TypeScript needs it
+  throw new Error('Max retries exceeded');
 }
 
 /**

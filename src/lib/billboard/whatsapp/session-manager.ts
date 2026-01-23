@@ -385,39 +385,56 @@ export function getStateDescription(state: WhatsAppSessionState): string {
 
 /**
  * Add a pending media item to the session
+ * Uses a transaction with row-level locking to prevent race conditions
+ * when multiple images arrive simultaneously
  */
 export async function addPendingMedia(
   phone: string,
   media: Omit<PendingMedia, 'receivedAt'> & { receivedAt: Date }
 ): Promise<PendingMedia[]> {
-  const current = await prisma.whatsAppSession.findUnique({
-    where: { phone },
+  // Use interactive transaction with row locking to prevent race condition
+  // when multiple images arrive simultaneously
+  const result = await prisma.$transaction(async (tx) => {
+    // Lock the row for update using raw query
+    // This ensures only one concurrent call can modify pendingMedia at a time
+    await tx.$queryRaw`SELECT id FROM "WhatsAppSession" WHERE phone = ${phone} FOR UPDATE`;
+
+    const current = await tx.whatsAppSession.findUnique({
+      where: { phone },
+    });
+
+    const currentData = (current?.sessionData as SessionData) || {};
+    const pendingMedia = currentData.pendingMedia || [];
+
+    // Add new media to the pending list (convert Date to ISO string for JSON storage)
+    const newMedia: PendingMedia = {
+      ...media,
+      receivedAt: media.receivedAt.toISOString(),
+    };
+    pendingMedia.push(newMedia);
+
+    // Set batchStartedAt if this is the first media in the batch (ISO string for JSON storage)
+    const batchStartedAt = currentData.batchStartedAt || new Date().toISOString();
+
+    await tx.whatsAppSession.update({
+      where: { phone },
+      data: {
+        sessionData: {
+          ...currentData,
+          pendingMedia,
+          batchStartedAt,
+        } as unknown as JsonSessionData,
+      },
+    });
+
+    return pendingMedia;
+  }, {
+    isolationLevel: 'Serializable', // Strongest isolation to prevent race conditions
+    timeout: 10000, // 10 second timeout
   });
 
-  const currentData = (current?.sessionData as SessionData) || {};
-  const pendingMedia = currentData.pendingMedia || [];
-
-  // Add new media to the pending list (convert Date to ISO string for JSON storage)
-  pendingMedia.push({
-    ...media,
-    receivedAt: media.receivedAt.toISOString(),
-  });
-
-  // Set batchStartedAt if this is the first media in the batch (ISO string for JSON storage)
-  const batchStartedAt = currentData.batchStartedAt || new Date().toISOString();
-
-  await prisma.whatsAppSession.update({
-    where: { phone },
-    data: {
-      sessionData: {
-        ...currentData,
-        pendingMedia,
-        batchStartedAt,
-      } as unknown as JsonSessionData,
-    },
-  });
-
-  return pendingMedia;
+  console.log(`[SESSION_MANAGER] Added pending media for ${phone}, total count: ${result.length}`);
+  return result;
 }
 
 /**

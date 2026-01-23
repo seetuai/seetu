@@ -397,7 +397,8 @@ export async function addPendingMedia(
   const result = await prisma.$transaction(async (tx) => {
     // Lock the row for update using raw query
     // This ensures only one concurrent call can modify pendingMedia at a time
-    await tx.$queryRaw`SELECT id FROM "WhatsAppSession" WHERE phone = ${phone} FOR UPDATE`;
+    // Note: Table name is "whatsapp_sessions" as defined by @@map in schema
+    await tx.$queryRaw`SELECT id FROM whatsapp_sessions WHERE phone = ${phone} FOR UPDATE`;
 
     const current = await tx.whatsAppSession.findUnique({
       where: { phone },

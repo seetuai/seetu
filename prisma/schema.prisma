@@ -1017,8 +1017,14 @@ model BillboardQueue {
 
 model BillboardPayment {
   id              String                  @id @default(uuid())
-  contentId       String                  @unique @map("content_id")
-  content         BillboardContent        @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  // Single content (backwards compatible, optional now)
+  contentId       String?                 @unique @map("content_id")
+  content         BillboardContent?       @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  // Multiple contents for batch processing
+  contentIds      String[]                @default([]) @map("content_ids")
+
   userId          String?                 @map("user_id")
   user            User?                   @relation(fields: [userId], references: [id])
   whatsappPhone   String?                 @map("whatsapp_phone")

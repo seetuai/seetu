@@ -10,6 +10,7 @@ import {
   type ValidationJobData,
   type ModerationJobData,
   type TranscodingJobData,
+  type BatchProcessingJobData,
   registerMemoryProcessor,
   enqueueModeration,
   enqueueTranscoding,
@@ -335,12 +336,138 @@ async function checkFfmpeg(): Promise<boolean> {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// BATCH PROCESSING WORKER
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Process batch of pending media
+ * Called after the batch timeout expires (3 seconds after last media received)
+ */
+async function processBatch(
+  job: Job<BatchProcessingJobData> | BatchProcessingJobData
+): Promise<void> {
+  const data = 'data' in job ? job.data : job;
+  const { phone } = data;
+
+  console.log(`[BILLBOARD_WORKER] Processing batch for ${phone}`);
+
+  // Import session manager functions dynamically to avoid circular dependency
+  const {
+    getPendingMedia,
+    clearPendingMedia,
+    setContentIds,
+    updateSessionState,
+  } = await import('../billboard/whatsapp/session-manager');
+  const { getWatiClient } = await import('../billboard/whatsapp/wati-client');
+
+  try {
+    const pending = await getPendingMedia(phone);
+
+    if (pending.length === 0) {
+      console.log(`[BILLBOARD_WORKER] No pending media for ${phone}, skipping`);
+      return;
+    }
+
+    // Get all content IDs
+    const contentIds = pending.map(p => p.contentId);
+
+    console.log(`[BILLBOARD_WORKER] Processing ${contentIds.length} files for ${phone}`);
+
+    // Store content IDs in session
+    await setContentIds(phone, contentIds);
+
+    // Clear pending media
+    await clearPendingMedia(phone);
+
+    // Update session state to awaiting billboard
+    await updateSessionState(phone, 'AWAITING_BILLBOARD', { contentIds });
+
+    // Send confirmation message and billboard list
+    const wati = getWatiClient();
+
+    // Get billboards for the list
+    const billboards = await prisma.billboard.findMany({
+      where: {
+        isActive: true,
+        status: { not: 'maintenance' },
+      },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        pricePerSlot: true,
+      },
+    });
+
+    if (billboards.length === 0) {
+      await wati.sendMessage({
+        phone,
+        message: 'Aucun panneau disponible. Réessayez plus tard.',
+      });
+      return;
+    }
+
+    // Use interactive list for billboard selection
+    const listResult = await wati.sendList({
+      phone,
+      body: `✅ ${contentIds.length} fichier(s) prêt(s) !\n\nChoisissez où diffuser votre pub:`,
+      buttonText: 'Voir les panneaux',
+      sections: [
+        {
+          title: 'Panneaux disponibles',
+          rows: [
+            {
+              id: 'all',
+              title: '📺 Tous les panneaux',
+              description: `${billboards.length} panneaux - Meilleure visibilité`,
+            },
+            ...billboards.map((b) => ({
+              id: b.id,
+              title: b.name,
+              description: `${b.address} • ${b.pricePerSlot} F`,
+            })),
+          ],
+        },
+      ],
+    });
+
+    // Fallback to text if list fails
+    if (!listResult.success) {
+      let message = `✅ ${contentIds.length} fichier(s) prêt(s) !\n\nChoisissez un panneau:\n\n`;
+      billboards.forEach((b, i) => {
+        message += `${i + 1}. ${b.name} - ${b.pricePerSlot} F\n`;
+      });
+      message += '\nRépondez avec le numéro ou "tous"';
+      await wati.sendMessage({ phone, message });
+    }
+
+    console.log(`[BILLBOARD_WORKER] Batch processed for ${phone}: ${contentIds.length} files`);
+  } catch (error) {
+    console.error(`[BILLBOARD_WORKER] Batch processing error for ${phone}:`, error);
+
+    // Try to notify user of error
+    try {
+      const { getWatiClient } = await import('../billboard/whatsapp/wati-client');
+      const wati = getWatiClient();
+      await wati.sendMessage({
+        phone,
+        message: '❌ Une erreur est survenue. Veuillez réessayer.',
+      });
+    } catch {
+      // Ignore notification errors
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // WORKER SETUP
 // ═══════════════════════════════════════════════════════════════
 
 let validationWorker: Worker<ValidationJobData> | null = null;
 let moderationWorker: Worker<ModerationJobData> | null = null;
 let transcodingWorker: Worker<TranscodingJobData> | null = null;
+let batchProcessingWorker: Worker<BatchProcessingJobData> | null = null;
 
 /**
  * Start all billboard workers
@@ -407,12 +534,33 @@ export function startBillboardWorkers(): void {
       console.error(`[BILLBOARD_WORKER] Transcoding job ${job?.id} failed:`, error);
     });
 
+    // Batch processing worker
+    batchProcessingWorker = new Worker<BatchProcessingJobData>(
+      BILLBOARD_QUEUES.BATCH_PROCESSING,
+      async (job) => {
+        await processBatch(job);
+      },
+      {
+        connection: redis,
+        concurrency: 5, // Can process multiple batches in parallel
+      }
+    );
+
+    batchProcessingWorker.on('completed', (job) => {
+      console.log(`[BILLBOARD_WORKER] Batch processing job ${job.id} completed`);
+    });
+
+    batchProcessingWorker.on('failed', (job, error) => {
+      console.error(`[BILLBOARD_WORKER] Batch processing job ${job?.id} failed:`, error);
+    });
+
     console.log('[BILLBOARD_WORKER] All workers started with Redis');
   } else {
     // Register in-memory processors for development
     registerMemoryProcessor(BILLBOARD_QUEUES.VALIDATION, (job) => processValidation(job as ValidationJobData));
     registerMemoryProcessor(BILLBOARD_QUEUES.MODERATION, (job) => processModeration(job as ModerationJobData));
     registerMemoryProcessor(BILLBOARD_QUEUES.TRANSCODING, (job) => processTranscoding(job as TranscodingJobData));
+    registerMemoryProcessor(BILLBOARD_QUEUES.BATCH_PROCESSING, (job) => processBatch(job as BatchProcessingJobData));
     console.log('[BILLBOARD_WORKER] Workers started with in-memory queue');
   }
 }
@@ -434,6 +582,10 @@ export async function stopBillboardWorkers(): Promise<void> {
   if (transcodingWorker) {
     stops.push(transcodingWorker.close());
     transcodingWorker = null;
+  }
+  if (batchProcessingWorker) {
+    stops.push(batchProcessingWorker.close());
+    batchProcessingWorker = null;
   }
 
   await Promise.all(stops);
@@ -489,4 +641,5 @@ export {
   processValidation,
   processModeration,
   processTranscoding,
+  processBatch,
 };

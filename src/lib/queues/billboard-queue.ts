@@ -16,6 +16,7 @@ export const BILLBOARD_QUEUES = {
   VALIDATION: 'seetu-billboard-validation',
   MODERATION: 'seetu-billboard-moderation',
   TRANSCODING: 'seetu-billboard-transcoding',
+  BATCH_PROCESSING: 'seetu-billboard-batch',
 } as const;
 
 // Job types
@@ -45,24 +46,34 @@ export interface TranscodingJobData {
   overlayPath?: string;
 }
 
+export interface BatchProcessingJobData {
+  phone: string;
+}
+
 // In-memory fallback queues for development
 const memoryQueues: Record<string, unknown[]> = {
   [BILLBOARD_QUEUES.VALIDATION]: [],
   [BILLBOARD_QUEUES.MODERATION]: [],
   [BILLBOARD_QUEUES.TRANSCODING]: [],
+  [BILLBOARD_QUEUES.BATCH_PROCESSING]: [],
 };
 
 const memoryProcessors: Record<string, ((job: unknown) => Promise<void>)[]> = {
   [BILLBOARD_QUEUES.VALIDATION]: [],
   [BILLBOARD_QUEUES.MODERATION]: [],
   [BILLBOARD_QUEUES.TRANSCODING]: [],
+  [BILLBOARD_QUEUES.BATCH_PROCESSING]: [],
 };
 
 // BullMQ queue instances (only if Redis is configured)
 let validationQueue: Queue<ValidationJobData> | null = null;
 let moderationQueue: Queue<ModerationJobData> | null = null;
 let transcodingQueue: Queue<TranscodingJobData> | null = null;
+let batchProcessingQueue: Queue<BatchProcessingJobData> | null = null;
 let queueEvents: Record<string, QueueEvents> = {};
+
+// In-memory batch timers (fallback for development without Redis)
+const memoryBatchTimers: Map<string, NodeJS.Timeout> = new Map();
 
 // Initialize queues if Redis is configured
 if (isRedisConfigured() && redis) {
@@ -94,11 +105,20 @@ if (isRedisConfigured() && redis) {
     },
   });
 
+  batchProcessingQueue = new Queue<BatchProcessingJobData>(BILLBOARD_QUEUES.BATCH_PROCESSING, {
+    connection: redis,
+    defaultJobOptions: {
+      removeOnComplete: true,
+      removeOnFail: true,
+    },
+  });
+
   // Create queue events for monitoring
   queueEvents = {
     [BILLBOARD_QUEUES.VALIDATION]: new QueueEvents(BILLBOARD_QUEUES.VALIDATION, { connection: redis }),
     [BILLBOARD_QUEUES.MODERATION]: new QueueEvents(BILLBOARD_QUEUES.MODERATION, { connection: redis }),
     [BILLBOARD_QUEUES.TRANSCODING]: new QueueEvents(BILLBOARD_QUEUES.TRANSCODING, { connection: redis }),
+    [BILLBOARD_QUEUES.BATCH_PROCESSING]: new QueueEvents(BILLBOARD_QUEUES.BATCH_PROCESSING, { connection: redis }),
   };
 }
 
@@ -157,6 +177,84 @@ export async function enqueueTranscoding(data: TranscodingJobData): Promise<stri
 }
 
 /**
+ * Schedule batch processing for a phone number
+ * Uses debounce: if a job already exists for this phone, it's removed and a new one is created
+ * This ensures we wait for the full batch window before processing
+ */
+export async function scheduleBatchProcessing(
+  phone: string,
+  delayMs: number = 3000
+): Promise<void> {
+  const jobId = `batch-${phone}`;
+
+  if (batchProcessingQueue) {
+    // Remove existing job for this phone (reset the timer)
+    try {
+      const existingJob = await batchProcessingQueue.getJob(jobId);
+      if (existingJob) {
+        await existingJob.remove();
+        console.log(`[BILLBOARD_QUEUE] Reset batch timer for ${phone}`);
+      }
+    } catch {
+      // Job might not exist, that's fine
+    }
+
+    // Create new delayed job
+    await batchProcessingQueue.add('process-batch', { phone }, {
+      delay: delayMs,
+      jobId,
+    });
+    console.log(`[BILLBOARD_QUEUE] Scheduled batch processing for ${phone} in ${delayMs}ms`);
+  } else {
+    // In-memory fallback for development
+    // Clear existing timer if any
+    const existingTimer = memoryBatchTimers.get(phone);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      console.log(`[BILLBOARD_QUEUE] Reset in-memory batch timer for ${phone}`);
+    }
+
+    // Set new timer
+    const timer = setTimeout(() => {
+      memoryBatchTimers.delete(phone);
+      // Process the batch via memory queue
+      memoryQueues[BILLBOARD_QUEUES.BATCH_PROCESSING].push({ phone });
+      processMemoryQueue(BILLBOARD_QUEUES.BATCH_PROCESSING);
+    }, delayMs);
+
+    memoryBatchTimers.set(phone, timer);
+    console.log(`[BILLBOARD_QUEUE] Scheduled in-memory batch for ${phone} in ${delayMs}ms`);
+  }
+}
+
+/**
+ * Cancel pending batch processing for a phone number
+ */
+export async function cancelBatchProcessing(phone: string): Promise<void> {
+  const jobId = `batch-${phone}`;
+
+  if (batchProcessingQueue) {
+    try {
+      const existingJob = await batchProcessingQueue.getJob(jobId);
+      if (existingJob) {
+        await existingJob.remove();
+        console.log(`[BILLBOARD_QUEUE] Cancelled batch processing for ${phone}`);
+      }
+    } catch {
+      // Job might not exist
+    }
+  } else {
+    // In-memory fallback
+    const existingTimer = memoryBatchTimers.get(phone);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      memoryBatchTimers.delete(phone);
+      console.log(`[BILLBOARD_QUEUE] Cancelled in-memory batch for ${phone}`);
+    }
+  }
+}
+
+/**
  * Process memory queue items (for development)
  */
 function processMemoryQueue(queueName: string): void {
@@ -205,6 +303,10 @@ export function getTranscodingQueue(): Queue<TranscodingJobData> | null {
   return transcodingQueue;
 }
 
+export function getBatchProcessingQueue(): Queue<BatchProcessingJobData> | null {
+  return batchProcessingQueue;
+}
+
 /**
  * Get queue statistics for all billboard queues
  */
@@ -212,6 +314,7 @@ export async function getBillboardQueueStats(): Promise<{
   validation: { waiting: number; active: number; completed: number; failed: number };
   moderation: { waiting: number; active: number; completed: number; failed: number };
   transcoding: { waiting: number; active: number; completed: number; failed: number };
+  batchProcessing: { waiting: number; active: number; completed: number; failed: number };
 }> {
   const getStats = async (queue: Queue | null, memoryQueue: unknown[]) => {
     if (queue) {
@@ -231,13 +334,14 @@ export async function getBillboardQueueStats(): Promise<{
     };
   };
 
-  const [validation, moderation, transcoding] = await Promise.all([
+  const [validation, moderation, transcoding, batchProcessing] = await Promise.all([
     getStats(validationQueue, memoryQueues[BILLBOARD_QUEUES.VALIDATION]),
     getStats(moderationQueue, memoryQueues[BILLBOARD_QUEUES.MODERATION]),
     getStats(transcodingQueue, memoryQueues[BILLBOARD_QUEUES.TRANSCODING]),
+    getStats(batchProcessingQueue, memoryQueues[BILLBOARD_QUEUES.BATCH_PROCESSING]),
   ]);
 
-  return { validation, moderation, transcoding };
+  return { validation, moderation, transcoding, batchProcessing };
 }
 
 /**
@@ -247,11 +351,19 @@ export async function clearAllQueues(): Promise<void> {
   if (validationQueue) await validationQueue.obliterate({ force: true });
   if (moderationQueue) await moderationQueue.obliterate({ force: true });
   if (transcodingQueue) await transcodingQueue.obliterate({ force: true });
+  if (batchProcessingQueue) await batchProcessingQueue.obliterate({ force: true });
 
   // Clear memory queues
   memoryQueues[BILLBOARD_QUEUES.VALIDATION] = [];
   memoryQueues[BILLBOARD_QUEUES.MODERATION] = [];
   memoryQueues[BILLBOARD_QUEUES.TRANSCODING] = [];
+  memoryQueues[BILLBOARD_QUEUES.BATCH_PROCESSING] = [];
+
+  // Clear memory batch timers
+  for (const timer of memoryBatchTimers.values()) {
+    clearTimeout(timer);
+  }
+  memoryBatchTimers.clear();
 }
 
 /**
@@ -261,6 +373,7 @@ export async function pauseAllQueues(): Promise<void> {
   if (validationQueue) await validationQueue.pause();
   if (moderationQueue) await moderationQueue.pause();
   if (transcodingQueue) await transcodingQueue.pause();
+  if (batchProcessingQueue) await batchProcessingQueue.pause();
 }
 
 /**
@@ -270,4 +383,5 @@ export async function resumeAllQueues(): Promise<void> {
   if (validationQueue) await validationQueue.resume();
   if (moderationQueue) await moderationQueue.resume();
   if (transcodingQueue) await transcodingQueue.resume();
+  if (batchProcessingQueue) await batchProcessingQueue.resume();
 }

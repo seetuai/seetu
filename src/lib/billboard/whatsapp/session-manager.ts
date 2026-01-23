@@ -13,17 +13,30 @@
  */
 
 import { prisma } from '../../prisma';
-import { WhatsAppSessionState } from '@prisma/client';
+import { WhatsAppSessionState, Prisma } from '@prisma/client';
+
+// Helper type for JSON-compatible session data
+type JsonSessionData = Prisma.InputJsonValue;
 
 // Session expires after 30 minutes of inactivity
 const SESSION_TIMEOUT_MINUTES = 30;
 
+export interface PendingMedia {
+  contentId: string;
+  mediaUrl: string;
+  mediaType: 'image' | 'video';
+  receivedAt: string; // ISO string for JSON compatibility
+}
+
 export interface SessionData {
   contentId?: string;
+  contentIds?: string[]; // For batch processing
   selectedBillboardIds?: string[];
   paymentId?: string;
   messageCount?: number;
   lastMediaUrl?: string;
+  pendingMedia?: PendingMedia[];
+  batchStartedAt?: string; // ISO string for JSON compatibility
 }
 
 export interface Session {
@@ -125,7 +138,7 @@ export async function updateSessionState(
     where: { phone },
     data: {
       state,
-      sessionData: mergedData,
+      sessionData: mergedData as unknown as JsonSessionData,
       currentContentId: data?.contentId || current?.currentContentId,
       lastMessageAt: now,
       expiresAt,
@@ -150,15 +163,14 @@ export async function setSessionContent(
   phone: string,
   contentId: string
 ): Promise<void> {
+  const current = await prisma.whatsAppSession.findUnique({ where: { phone } });
+  const currentData = (current?.sessionData as SessionData) || {};
+
   await prisma.whatsAppSession.update({
     where: { phone },
     data: {
       currentContentId: contentId,
-      sessionData: {
-        ...((await prisma.whatsAppSession.findUnique({ where: { phone } }))
-          ?.sessionData as SessionData),
-        contentId,
-      },
+      sessionData: { ...currentData, contentId } as unknown as JsonSessionData,
     },
   });
 }
@@ -182,7 +194,7 @@ export async function setSelectedBillboards(
       sessionData: {
         ...currentData,
         selectedBillboardIds: billboardIds,
-      },
+      } as unknown as JsonSessionData,
     },
   });
 }
@@ -206,7 +218,7 @@ export async function setPaymentId(
       sessionData: {
         ...currentData,
         paymentId,
-      },
+      } as unknown as JsonSessionData,
     },
   });
 }
@@ -365,4 +377,118 @@ export function getStateDescription(state: WhatsAppSessionState): string {
   };
 
   return descriptions[state] || state;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BATCH MEDIA MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Add a pending media item to the session
+ */
+export async function addPendingMedia(
+  phone: string,
+  media: Omit<PendingMedia, 'receivedAt'> & { receivedAt: Date }
+): Promise<PendingMedia[]> {
+  const current = await prisma.whatsAppSession.findUnique({
+    where: { phone },
+  });
+
+  const currentData = (current?.sessionData as SessionData) || {};
+  const pendingMedia = currentData.pendingMedia || [];
+
+  // Add new media to the pending list (convert Date to ISO string for JSON storage)
+  pendingMedia.push({
+    ...media,
+    receivedAt: media.receivedAt.toISOString(),
+  });
+
+  // Set batchStartedAt if this is the first media in the batch (ISO string for JSON storage)
+  const batchStartedAt = currentData.batchStartedAt || new Date().toISOString();
+
+  await prisma.whatsAppSession.update({
+    where: { phone },
+    data: {
+      sessionData: {
+        ...currentData,
+        pendingMedia,
+        batchStartedAt,
+      } as unknown as JsonSessionData,
+    },
+  });
+
+  return pendingMedia;
+}
+
+/**
+ * Get pending media for a phone number
+ */
+export async function getPendingMedia(phone: string): Promise<PendingMedia[]> {
+  const session = await prisma.whatsAppSession.findUnique({
+    where: { phone },
+  });
+
+  if (!session) return [];
+
+  const data = session.sessionData as SessionData;
+  return data.pendingMedia || [];
+}
+
+/**
+ * Clear pending media from session
+ */
+export async function clearPendingMedia(phone: string): Promise<void> {
+  const current = await prisma.whatsAppSession.findUnique({
+    where: { phone },
+  });
+
+  if (!current) return;
+
+  const currentData = (current.sessionData as SessionData) || {};
+
+  await prisma.whatsAppSession.update({
+    where: { phone },
+    data: {
+      sessionData: {
+        ...currentData,
+        pendingMedia: [],
+        batchStartedAt: undefined,
+      } as unknown as JsonSessionData,
+    },
+  });
+}
+
+/**
+ * Check if a batch is in progress for this phone
+ */
+export async function isBatchInProgress(phone: string): Promise<boolean> {
+  const pendingMedia = await getPendingMedia(phone);
+  return pendingMedia.length > 0;
+}
+
+/**
+ * Set content IDs in session (for batch)
+ */
+export async function setContentIds(
+  phone: string,
+  contentIds: string[]
+): Promise<void> {
+  const current = await prisma.whatsAppSession.findUnique({
+    where: { phone },
+  });
+
+  const currentData = (current?.sessionData as SessionData) || {};
+
+  await prisma.whatsAppSession.update({
+    where: { phone },
+    data: {
+      sessionData: {
+        ...currentData,
+        contentIds,
+        // Keep first contentId for backwards compatibility
+        contentId: contentIds[0],
+      } as unknown as JsonSessionData,
+      currentContentId: contentIds[0],
+    },
+  });
 }

@@ -15,7 +15,9 @@ import { RESOLUTIONS } from './transcoding';
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://seetu.sn';
 
 export interface CreatePaymentParams {
-  contentId: string;
+  // Support both single contentId (legacy) and multiple contentIds (batch)
+  contentId?: string;
+  contentIds?: string[];
   billboardIds: string[];
   amountCfa: number;
   userId?: string;
@@ -30,25 +32,35 @@ export interface PaymentResult {
 
 /**
  * Create a billboard payment
+ * Supports both single content (legacy) and batch processing (multiple contents)
  */
 export async function createBillboardPayment(
   params: CreatePaymentParams
 ): Promise<PaymentResult> {
-  const { contentId, billboardIds, amountCfa, userId, whatsappPhone } = params;
+  const { contentId, contentIds: inputContentIds, billboardIds, amountCfa, userId, whatsappPhone } = params;
 
-  // Verify content exists
-  const content = await prisma.billboardContent.findUnique({
-    where: { id: contentId },
+  // Support both legacy single contentId and new batch contentIds
+  const contentIds = inputContentIds?.length ? inputContentIds : (contentId ? [contentId] : []);
+
+  if (contentIds.length === 0) {
+    throw new Error('No content IDs provided');
+  }
+
+  // Verify all contents exist
+  const contents = await prisma.billboardContent.findMany({
+    where: { id: { in: contentIds } },
   });
 
-  if (!content) {
-    throw new Error('Content not found');
+  if (contents.length !== contentIds.length) {
+    throw new Error('One or more contents not found');
   }
 
   // Create payment record first
+  // Use first contentId for backwards compatibility (legacy relation)
   const payment = await prisma.billboardPayment.create({
     data: {
-      contentId,
+      contentId: contentIds[0], // Legacy field for backwards compatibility
+      contentIds, // New array field for batch
       userId,
       whatsappPhone,
       billboardIds,
@@ -104,6 +116,7 @@ export async function createBillboardPayment(
 
 /**
  * Process successful payment
+ * Handles both single content and batch processing
  */
 export async function processPaymentSuccess(
   paymentId: string,
@@ -127,6 +140,13 @@ export async function processPaymentSuccess(
     return;
   }
 
+  // Get all content IDs (batch support)
+  const contentIds = payment.contentIds?.length ? payment.contentIds : (payment.contentId ? [payment.contentId] : []);
+
+  if (contentIds.length === 0) {
+    throw new Error('No content IDs found in payment');
+  }
+
   // Update payment status
   await prisma.billboardPayment.update({
     where: { id: paymentId },
@@ -138,9 +158,14 @@ export async function processPaymentSuccess(
     },
   });
 
-  // Update content status to processing
-  await prisma.billboardContent.update({
-    where: { id: payment.contentId },
+  // Get all contents
+  const contents = await prisma.billboardContent.findMany({
+    where: { id: { in: contentIds } },
+  });
+
+  // Update all contents status to processing
+  await prisma.billboardContent.updateMany({
+    where: { id: { in: contentIds } },
     data: { status: 'processing' },
   });
 
@@ -153,28 +178,45 @@ export async function processPaymentSuccess(
     },
   });
 
-  // Enqueue transcoding job
-  await enqueueTranscoding({
-    contentId: payment.contentId,
-    originalUrl: payment.content.originalUrl,
-    mediaType: payment.content.mediaType as 'image' | 'video',
-    targetWidth: billboard?.resolutionWidth || RESOLUTIONS.LANDSCAPE_HD.width,
-    targetHeight: billboard?.resolutionHeight || RESOLUTIONS.LANDSCAPE_HD.height,
-    addOverlay: true,
-  });
+  const targetWidth = billboard?.resolutionWidth || RESOLUTIONS.LANDSCAPE_HD.width;
+  const targetHeight = billboard?.resolutionHeight || RESOLUTIONS.LANDSCAPE_HD.height;
 
-  console.log('[BILLBOARD_PAYMENT] Payment processed successfully:', paymentId);
+  // Enqueue transcoding jobs for all contents
+  for (const content of contents) {
+    await enqueueTranscoding({
+      contentId: content.id,
+      originalUrl: content.originalUrl,
+      mediaType: content.mediaType as 'image' | 'video',
+      targetWidth,
+      targetHeight,
+      addOverlay: true,
+    });
+  }
+
+  console.log(`[BILLBOARD_PAYMENT] Payment processed successfully: ${paymentId} (${contentIds.length} contents)`);
 }
 
 /**
  * Add content to queues after transcoding completes
+ * Supports finding payment by either contentId or within contentIds array
  */
 export async function addContentToQueues(contentId: string): Promise<void> {
   // Get payment to find billboard IDs
-  const payment = await prisma.billboardPayment.findFirst({
+  // Check both legacy contentId field and new contentIds array
+  let payment = await prisma.billboardPayment.findFirst({
     where: { contentId },
     select: { billboardIds: true },
   });
+
+  // If not found by contentId, check contentIds array
+  if (!payment) {
+    payment = await prisma.billboardPayment.findFirst({
+      where: {
+        contentIds: { has: contentId },
+      },
+      select: { billboardIds: true },
+    });
+  }
 
   if (!payment) {
     console.error('[BILLBOARD_PAYMENT] No payment found for content:', contentId);
@@ -191,6 +233,7 @@ export async function addContentToQueues(contentId: string): Promise<void> {
 
 /**
  * Process payment failure
+ * Handles both single content and batch processing
  */
 export async function processPaymentFailure(paymentId: string): Promise<void> {
   await prisma.billboardPayment.update({
@@ -201,29 +244,38 @@ export async function processPaymentFailure(paymentId: string): Promise<void> {
   // Update content status back to pending payment
   const payment = await prisma.billboardPayment.findUnique({
     where: { id: paymentId },
-    select: { contentId: true },
+    select: { contentId: true, contentIds: true },
   });
 
   if (payment) {
-    await prisma.billboardContent.update({
-      where: { id: payment.contentId },
-      data: { status: 'pending_payment' },
-    });
+    // Get all content IDs (batch support)
+    const contentIds = payment.contentIds?.length ? payment.contentIds : (payment.contentId ? [payment.contentId] : []);
+
+    if (contentIds.length > 0) {
+      await prisma.billboardContent.updateMany({
+        where: { id: { in: contentIds } },
+        data: { status: 'pending_payment' },
+      });
+    }
   }
 }
 
 /**
  * Process refund
+ * Handles both single content and batch processing
  */
 export async function processRefund(paymentId: string): Promise<void> {
   const payment = await prisma.billboardPayment.findUnique({
     where: { id: paymentId },
-    select: { contentId: true },
+    select: { contentId: true, contentIds: true },
   });
 
   if (!payment) {
     throw new Error('Payment not found');
   }
+
+  // Get all content IDs (batch support)
+  const contentIds = payment.contentIds?.length ? payment.contentIds : (payment.contentId ? [payment.contentId] : []);
 
   // Update payment status
   await prisma.billboardPayment.update({
@@ -231,25 +283,35 @@ export async function processRefund(paymentId: string): Promise<void> {
     data: { status: 'refunded' },
   });
 
-  // Remove content from queues if not yet played
-  await prisma.billboardQueue.deleteMany({
-    where: {
-      contentId: payment.contentId,
-      status: 'queued',
-    },
-  });
+  // Remove all contents from queues if not yet played
+  if (contentIds.length > 0) {
+    await prisma.billboardQueue.deleteMany({
+      where: {
+        contentId: { in: contentIds },
+        status: 'queued',
+      },
+    });
+  }
 }
 
 /**
  * Create payment using platform credits (for logged-in users)
+ * Supports both single content and batch processing
  */
 export async function createCreditPayment(
   params: CreatePaymentParams & { creditsCost: number }
 ): Promise<PaymentResult> {
-  const { contentId, billboardIds, amountCfa, userId, creditsCost } = params;
+  const { contentId, contentIds: inputContentIds, billboardIds, amountCfa, userId, creditsCost } = params;
 
   if (!userId) {
     throw new Error('User ID required for credit payment');
+  }
+
+  // Support both legacy single contentId and new batch contentIds
+  const contentIds = inputContentIds?.length ? inputContentIds : (contentId ? [contentId] : []);
+
+  if (contentIds.length === 0) {
+    throw new Error('No content IDs provided');
   }
 
   // Check user credits
@@ -265,7 +327,8 @@ export async function createCreditPayment(
   // Create payment record
   const payment = await prisma.billboardPayment.create({
     data: {
-      contentId,
+      contentId: contentIds[0], // Legacy field for backwards compatibility
+      contentIds, // New array field for batch
       userId,
       billboardIds,
       amountCfa,
@@ -289,7 +352,7 @@ export async function createCreditPayment(
         reason: 'billboard',
         refType: 'billboard_payment',
         refId: payment.id,
-        description: `Billboard ad - ${billboardIds.length} screen(s)`,
+        description: `Billboard ad - ${contentIds.length} content(s) on ${billboardIds.length} screen(s)`,
       },
     }),
   ]);

@@ -13,9 +13,12 @@ import {
   setSelectedBillboards,
   setPaymentId,
   resetSession,
+  addPendingMedia,
+  getPendingMedia,
   Session,
   SessionData,
 } from './session-manager';
+import { scheduleBatchProcessing } from '../../queues/billboard-queue';
 import * as templates from './templates';
 import { prisma } from '../../prisma';
 import { getBillboardPricing, calculatePrice, formatPriceCFA } from '../pricing';
@@ -200,8 +203,12 @@ async function handleSpecialCommands(
   return null; // Not a special command
 }
 
+// Batch processing delay in milliseconds (3 seconds)
+const BATCH_DELAY_MS = 3000;
+
 /**
  * Handle media upload state
+ * Uses batch processing to group multiple images sent in quick succession
  */
 async function handleMediaState(
   message: WatiMessage,
@@ -239,12 +246,6 @@ async function handleMediaState(
     });
     return { success: true };
   }
-
-  // Short processing message
-  await wati.sendMessage({
-    phone: message.phone,
-    message: '⏳ Traitement en cours...',
-  });
 
   try {
     // Download media from WATI - requires authentication for WATI file URLs
@@ -288,12 +289,26 @@ async function handleMediaState(
       },
     });
 
-    // Update session with content ID
-    await setSessionContent(message.phone, content.id);
+    // Add to pending media batch
+    const pendingMedia = await addPendingMedia(message.phone, {
+      contentId: content.id,
+      mediaUrl: upload.url,
+      mediaType: message.type as 'image' | 'video',
+      receivedAt: new Date(),
+    });
 
-    // Update session state and send billboard list directly
-    await updateSessionState(message.phone, 'AWAITING_BILLBOARD');
-    await sendBillboardList(message.phone);
+    // Send acknowledgment with current count
+    const count = pendingMedia.length;
+    const fileWord = count === 1 ? 'fichier reçu' : 'fichiers reçus';
+    await wati.sendMessage({
+      phone: message.phone,
+      message: `📸 ${count} ${fileWord}...`,
+    });
+
+    // Schedule batch processing (with debounce - resets timer if more media arrives)
+    await scheduleBatchProcessing(message.phone, BATCH_DELAY_MS);
+
+    console.log(`[WA_HANDLER] Added media to batch for ${message.phone}, count: ${count}`);
 
     return { success: true };
   } catch (error) {
@@ -475,15 +490,10 @@ async function handleBillboardSelection(
   const billboardIds = selectedBillboards.map(b => b.id);
   await setSelectedBillboards(message.phone, billboardIds);
 
-  // Calculate price
-  const billboardSlots: Record<string, number> = {};
-  billboardIds.forEach(id => {
-    billboardSlots[id] = 1;
-  });
-  const pricing = await calculatePrice(billboardSlots);
+  // Get content IDs from session (batch or single)
+  const contentIds = session.data.contentIds || (session.currentContentId ? [session.currentContentId] : []);
 
-  // Create payment
-  if (!session.currentContentId) {
+  if (contentIds.length === 0) {
     await wati.sendMessage({
       phone: message.phone,
       message: '❌ Erreur. Envoyez "reprendre" pour recommencer.',
@@ -491,11 +501,21 @@ async function handleBillboardSelection(
     return { success: false, error: 'No content ID in session' };
   }
 
+  // Calculate price: price per content × number of contents
+  const billboardSlots: Record<string, number> = {};
+  billboardIds.forEach(id => {
+    billboardSlots[id] = 1;
+  });
+  const pricing = await calculatePrice(billboardSlots);
+
+  // Total amount = price per billboard × number of contents
+  const totalAmount = pricing.totalCfa * contentIds.length;
+
   try {
     const payment = await createBillboardPayment({
-      contentId: session.currentContentId,
+      contentIds,
       billboardIds,
-      amountCfa: pricing.totalCfa,
+      amountCfa: totalAmount,
       whatsappPhone: message.phone,
     });
 
@@ -504,10 +524,13 @@ async function handleBillboardSelection(
 
     // Build recap message
     const billboardNames = selectedBillboards.map(b => b.name).join(', ');
+    const contentWord = contentIds.length === 1 ? 'contenu' : 'contenus';
     const recapBody = `📋 *Récapitulatif*\n\n` +
+      `📁 ${contentIds.length} ${contentWord}\n` +
       `📺 ${selectedBillboards.length > 1 ? 'Panneaux' : 'Panneau'}: ${billboardNames}\n` +
-      `💰 Total: ${pricing.totalCfa} F CFA` +
-      (pricing.discount > 0 ? ` (${pricing.discountReason})` : '');
+      `💰 Total: ${totalAmount} F CFA` +
+      (pricing.discount > 0 ? ` (${pricing.discountReason})` : '') +
+      (contentIds.length > 1 ? `\n\n_${pricing.totalCfa} F × ${contentIds.length} ${contentWord}_` : '');
 
     // Send CTA button for payment (uses approved template)
     // Template URL should be: https://seetu.ai/api/v1/pay/{{3}}
@@ -522,7 +545,7 @@ async function handleBillboardSelection(
       templateName: 'payment',
       templateParams: {
         billboardName: billboardNames,
-        price: pricing.totalCfa.toString(),
+        price: totalAmount.toString(),
         paymentId: payment.id,
       },
     });
@@ -732,13 +755,23 @@ export async function onModerationComplete(
 /**
  * Handle payment complete callback
  * Called by webhook when payment succeeds
+ * Now supports batch processing with multiple content IDs
  */
 export async function onPaymentComplete(
   contentId: string,
   paymentId: string
 ): Promise<void> {
+  // Get payment to retrieve all content IDs (for batch)
+  const payment = await prisma.billboardPayment.findUnique({
+    where: { id: paymentId },
+    select: { contentIds: true },
+  });
+
+  const contentIds = payment?.contentIds?.length ? payment.contentIds : [contentId];
+
+  // Get first content for phone number
   const content = await prisma.billboardContent.findUnique({
-    where: { id: contentId },
+    where: { id: contentIds[0] },
     select: { whatsappPhone: true },
   });
 
@@ -747,25 +780,43 @@ export async function onPaymentComplete(
   const wati = getWatiClient();
   const phone = content.whatsappPhone;
 
-  // Get queue positions
-  const positions = await getContentQueuePositions(contentId);
+  // Get queue positions for all contents
+  const allPositions: Array<{
+    billboardName: string;
+    position: number;
+    estimatedTime: Date | null;
+  }> = [];
+
+  for (const cId of contentIds) {
+    const positions = await getContentQueuePositions(cId);
+    allPositions.push(...positions.map(p => ({
+      billboardName: p.billboardName,
+      position: p.position,
+      estimatedTime: p.estimatedPlayTime,
+    })));
+  }
 
   await updateSessionState(phone, 'CONFIRMED');
-  await wati.sendMessage({
-    phone,
-    message: templates.PAYMENT_SUCCESS,
-  });
 
-  await wati.sendMessage({
-    phone,
-    message: templates.formatQueueConfirmation(
-      positions.map(p => ({
-        billboardName: p.billboardName,
-        position: p.position,
-        estimatedTime: p.estimatedPlayTime,
-      }))
-    ),
-  });
+  // Send appropriate success message based on batch size
+  if (contentIds.length > 1) {
+    await wati.sendMessage({
+      phone,
+      message: `✅ Paiement confirmé pour ${contentIds.length} contenus !\n\nVos publicités sont en cours de traitement et seront diffusées bientôt.`,
+    });
+  } else {
+    await wati.sendMessage({
+      phone,
+      message: templates.PAYMENT_SUCCESS,
+    });
+  }
+
+  if (allPositions.length > 0) {
+    await wati.sendMessage({
+      phone,
+      message: templates.formatQueueConfirmation(allPositions),
+    });
+  }
 }
 
 /**

@@ -181,33 +181,36 @@ async function processModeration(
       },
     });
 
-    if (!result.approved && !result.reviewRequired) {
-      // Auto-rejected
-      await prisma.billboardContent.update({
-        where: { id: contentId },
-        data: {
-          status: 'rejected',
-          rejectionReason: result.rejectionReason || 'Content violates community guidelines',
-        },
-      });
-      console.log(`[BILLBOARD_WORKER] Content auto-rejected: ${result.rejectionReason}`);
-
-      // Notify user and check if batch can proceed with remaining items
-      await notifyModerationResult(contentId, false, result.rejectionReason);
+    if (!result.approved) {
+      if (result.reviewRequired) {
+        // Medium confidence rejection — keep in pending_moderation for manual review
+        console.log(`[BILLBOARD_WORKER] Content flagged for manual review: ${contentId}`);
+        // Don't send per-file notification — batch handler will notify when all items are done
+        // For now, treat as rejected to unblock the batch
+        await prisma.billboardContent.update({
+          where: { id: contentId },
+          data: {
+            status: 'rejected',
+            rejectionReason: result.rejectionReason || 'Contenu nécessite une vérification manuelle',
+          },
+        });
+        await notifyModerationResult(contentId, false, result.rejectionReason);
+      } else {
+        // Auto-rejected (high confidence)
+        await prisma.billboardContent.update({
+          where: { id: contentId },
+          data: {
+            status: 'rejected',
+            rejectionReason: result.rejectionReason || 'Content violates community guidelines',
+          },
+        });
+        console.log(`[BILLBOARD_WORKER] Content auto-rejected: ${result.rejectionReason}`);
+        await notifyModerationResult(contentId, false, result.rejectionReason);
+      }
       return;
     }
 
-    if (result.reviewRequired) {
-      // Needs manual review - keep in pending_moderation
-      console.log(`[BILLBOARD_WORKER] Content flagged for manual review: ${contentId}`);
-
-      // Notify user about pending review
-      const { onModerationComplete } = await import('../billboard/whatsapp/message-handler');
-      await onModerationComplete(contentId, false, true);
-      return;
-    }
-
-    // Moderation passed, move to payment pending
+    // Moderation passed (approved=true, even if reviewRequired was set for medium confidence)
     await prisma.billboardContent.update({
       where: { id: contentId },
       data: {
@@ -215,7 +218,11 @@ async function processModeration(
       },
     });
 
-    console.log(`[BILLBOARD_WORKER] Moderation passed, awaiting payment: ${contentId}`);
+    if (result.reviewRequired) {
+      console.log(`[BILLBOARD_WORKER] Moderation passed with medium confidence, proceeding: ${contentId}`);
+    } else {
+      console.log(`[BILLBOARD_WORKER] Moderation passed, awaiting payment: ${contentId}`);
+    }
 
     // Check if all batch items are moderated → proceed to billboard selection
     await notifyModerationResult(contentId, true);
@@ -586,10 +593,9 @@ async function processBatch(
     await clearPendingMedia(phone);
 
     // Enqueue validation for each content (moderation pipeline)
-    // After validation + moderation pass, onModerationComplete() will
+    // After validation + moderation pass, notifyModerationResult() will
     // transition to AWAITING_BILLBOARD and send the billboard list
     const { enqueueValidation } = await import('../queues/billboard-queue');
-    const { getWatiClient } = await import('../billboard/whatsapp/wati-client');
     const wati = getWatiClient();
 
     await wati.sendMessage({

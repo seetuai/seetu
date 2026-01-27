@@ -47,9 +47,9 @@ Raison: ${reason}
 
 Le contenu doit respecter nos directives communautaires. Envoyez un autre fichier si vous le souhaitez.`;
 
-export const MEDIA_MODERATION_PENDING = `Votre contenu est en cours de vérification par notre équipe.
+export const MEDIA_MODERATION_PENDING = `Votre contenu est en cours de vérification automatique.
 
-Vous recevrez une notification dès qu'il sera approuvé (généralement sous 1 heure pendant les heures ouvrables).`;
+Vous recevrez une notification dès qu'il sera approuvé.`;
 
 // ═══════════════════════════════════════════════════════════════
 // BILLBOARD SELECTION

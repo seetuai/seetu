@@ -293,25 +293,18 @@ async function handleMediaState(
     });
 
     // Add to pending media batch
-    const pendingMedia = await addPendingMedia(message.phone, {
+    await addPendingMedia(message.phone, {
       contentId: content.id,
       mediaUrl: upload.url,
       mediaType: message.type as 'image' | 'video',
       receivedAt: new Date(),
     });
 
-    // Send acknowledgment with current count
-    const count = pendingMedia.length;
-    const fileWord = count === 1 ? 'fichier reçu' : 'fichiers reçus';
-    await wati.sendMessage({
-      phone: message.phone,
-      message: `📸 ${count} ${fileWord}...`,
-    });
-
+    // No per-file acknowledgment — batch processor sends one final message
     // Schedule batch processing (with debounce - resets timer if more media arrives)
     await scheduleBatchProcessing(message.phone, BATCH_DELAY_MS);
 
-    console.log(`[WA_HANDLER] Added media to batch for ${message.phone}, count: ${count}`);
+    console.log(`[WA_HANDLER] Added media to batch for ${message.phone}`);
 
     return { success: true };
   } catch (error) {

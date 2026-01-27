@@ -281,14 +281,14 @@ async function handleMediaState(
       contentType
     );
 
-    // Create content record
+    // Create content record (starts as pending_validation for moderation pipeline)
     const content = await prisma.billboardContent.create({
       data: {
         whatsappPhone: message.phone,
         whatsappName: session.name,
         mediaType: message.type,
         originalUrl: upload.url,
-        status: 'pending_payment',
+        status: 'pending_validation',
       },
     });
 

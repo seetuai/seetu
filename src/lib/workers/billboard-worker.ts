@@ -53,6 +53,10 @@ async function processValidation(
         },
       });
       console.log(`[BILLBOARD_WORKER] Content rejected: ${result.errors.join('; ')}`);
+
+      // Notify WhatsApp user
+      const { onValidationComplete } = await import('../billboard/whatsapp/message-handler');
+      await onValidationComplete(contentId, false, result.errors.join('; '));
       return;
     }
 
@@ -87,6 +91,12 @@ async function processValidation(
         rejectionReason: `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       },
     });
+
+    // Notify WhatsApp user
+    try {
+      const { onValidationComplete } = await import('../billboard/whatsapp/message-handler');
+      await onValidationComplete(contentId, false, error instanceof Error ? error.message : 'Validation failed');
+    } catch { /* ignore notification errors */ }
   }
 }
 
@@ -135,12 +145,19 @@ async function processModeration(
         },
       });
       console.log(`[BILLBOARD_WORKER] Content auto-rejected: ${result.rejectionReason}`);
+
+      // Notify user and check if batch can proceed with remaining items
+      await notifyModerationResult(contentId, false, result.rejectionReason);
       return;
     }
 
     if (result.reviewRequired) {
       // Needs manual review - keep in pending_moderation
       console.log(`[BILLBOARD_WORKER] Content flagged for manual review: ${contentId}`);
+
+      // Notify user about pending review
+      const { onModerationComplete } = await import('../billboard/whatsapp/message-handler');
+      await onModerationComplete(contentId, false, true);
       return;
     }
 
@@ -153,6 +170,9 @@ async function processModeration(
     });
 
     console.log(`[BILLBOARD_WORKER] Moderation passed, awaiting payment: ${contentId}`);
+
+    // Check if all batch items are moderated → proceed to billboard selection
+    await notifyModerationResult(contentId, true);
   } catch (error) {
     console.error(`[BILLBOARD_WORKER] Moderation error:`, error);
 
@@ -340,6 +360,141 @@ async function checkFfmpeg(): Promise<boolean> {
   }
 }
 
+/**
+ * After moderation completes for a content item, check if all items
+ * in the batch are done. If so, update the session with only approved
+ * content IDs and transition to AWAITING_BILLBOARD.
+ * Handles partial approval: rejected items are removed from the batch.
+ */
+async function notifyModerationResult(
+  contentId: string,
+  approved: boolean,
+  rejectionReason?: string
+): Promise<void> {
+  try {
+    // Find the WhatsApp session that owns this content
+    const content = await prisma.billboardContent.findUnique({
+      where: { id: contentId },
+      select: { whatsappPhone: true },
+    });
+
+    if (!content?.whatsappPhone) return;
+
+    const { getSession, setContentIds, updateSessionState } = await import('../billboard/whatsapp/session-manager');
+    const { getWatiClient } = await import('../billboard/whatsapp/wati-client');
+    const wati = getWatiClient();
+
+    const session = await getSession(content.whatsappPhone);
+    if (!session) return;
+
+    const batchContentIds = session.data.contentIds || [];
+    if (batchContentIds.length === 0) return;
+
+    if (!approved) {
+      // Notify about rejection
+      const reason = rejectionReason || 'Contenu non conforme';
+      await wati.sendMessage({
+        phone: content.whatsappPhone,
+        message: `❌ Un fichier a été refusé: ${reason}`,
+      });
+    }
+
+    // Check status of all batch items
+    const allContents = await prisma.billboardContent.findMany({
+      where: { id: { in: batchContentIds } },
+      select: { id: true, status: true },
+    });
+
+    const stillPending = allContents.filter(c =>
+      c.status === 'pending_validation' || c.status === 'pending_moderation'
+    );
+
+    // If some items are still being validated/moderated, wait
+    if (stillPending.length > 0) return;
+
+    // All items have been processed — gather approved ones
+    const approvedIds = allContents
+      .filter(c => c.status === 'pending_payment')
+      .map(c => c.id);
+
+    if (approvedIds.length === 0) {
+      // All rejected
+      await wati.sendMessage({
+        phone: content.whatsappPhone,
+        message: '❌ Tous vos fichiers ont été refusés. Envoyez de nouveaux fichiers conformes à nos directives.',
+      });
+      const { resetSession } = await import('../billboard/whatsapp/session-manager');
+      await resetSession(content.whatsappPhone);
+      return;
+    }
+
+    // Update session with only approved content IDs
+    await setContentIds(content.whatsappPhone, approvedIds);
+
+    const rejectedCount = batchContentIds.length - approvedIds.length;
+    if (rejectedCount > 0) {
+      await wati.sendMessage({
+        phone: content.whatsappPhone,
+        message: `✅ ${approvedIds.length} fichier(s) approuvé(s), ${rejectedCount} refusé(s).`,
+      });
+    }
+
+    // Transition to AWAITING_BILLBOARD and send billboard list
+    await updateSessionState(content.whatsappPhone, 'AWAITING_BILLBOARD', { contentIds: approvedIds });
+
+    // Send billboard selection list
+    const billboards = await prisma.billboard.findMany({
+      where: { isActive: true, status: { not: 'maintenance' } },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, address: true, pricePerSlot: true },
+    });
+
+    if (billboards.length === 0) {
+      await wati.sendMessage({
+        phone: content.whatsappPhone,
+        message: 'Aucun panneau disponible. Réessayez plus tard.',
+      });
+      return;
+    }
+
+    const listResult = await wati.sendList({
+      phone: content.whatsappPhone,
+      body: `✅ ${approvedIds.length} fichier(s) prêt(s) !\n\nChoisissez où diffuser votre pub:`,
+      buttonText: 'Voir les panneaux',
+      sections: [
+        {
+          title: 'Panneaux disponibles',
+          rows: [
+            {
+              id: 'all',
+              title: '📺 Tous les panneaux',
+              description: `${billboards.length} panneaux - Meilleure visibilité`,
+            },
+            ...billboards.map((b) => ({
+              id: b.id,
+              title: b.name,
+              description: `${b.address} • ${b.pricePerSlot} F`,
+            })),
+          ],
+        },
+      ],
+    });
+
+    if (!listResult.success) {
+      let message = `✅ ${approvedIds.length} fichier(s) prêt(s) !\n\nChoisissez un panneau:\n\n`;
+      billboards.forEach((b, i) => {
+        message += `${i + 1}. ${b.name} - ${b.pricePerSlot} F\n`;
+      });
+      message += '\nRépondez avec le numéro ou "tous"';
+      await wati.sendMessage({ phone: content.whatsappPhone, message });
+    }
+
+    console.log(`[BILLBOARD_WORKER] Moderation complete for batch, ${approvedIds.length} approved for ${content.whatsappPhone}`);
+  } catch (error) {
+    console.error(`[BILLBOARD_WORKER] notifyModerationResult error:`, error);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
 // BATCH PROCESSING WORKER
 // ═══════════════════════════════════════════════════════════════
@@ -384,70 +539,26 @@ async function processBatch(
     // Clear pending media
     await clearPendingMedia(phone);
 
-    // Update session state to awaiting billboard
-    await updateSessionState(phone, 'AWAITING_BILLBOARD', { contentIds });
-
-    // Send confirmation message and billboard list
+    // Enqueue validation for each content (moderation pipeline)
+    // After validation + moderation pass, onModerationComplete() will
+    // transition to AWAITING_BILLBOARD and send the billboard list
+    const { enqueueValidation } = await import('../queues/billboard-queue');
+    const { getWatiClient } = await import('../billboard/whatsapp/wati-client');
     const wati = getWatiClient();
 
-    // Get billboards for the list
-    const billboards = await prisma.billboard.findMany({
-      where: {
-        isActive: true,
-        status: { not: 'maintenance' },
-      },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        address: true,
-        pricePerSlot: true,
-      },
-    });
-
-    if (billboards.length === 0) {
-      await wati.sendMessage({
-        phone,
-        message: 'Aucun panneau disponible. Réessayez plus tard.',
-      });
-      return;
-    }
-
-    // Use interactive list for billboard selection
-    const listResult = await wati.sendList({
+    await wati.sendMessage({
       phone,
-      body: `✅ ${contentIds.length} fichier(s) prêt(s) !\n\nChoisissez où diffuser votre pub:`,
-      buttonText: 'Voir les panneaux',
-      sections: [
-        {
-          title: 'Panneaux disponibles',
-          rows: [
-            {
-              id: 'all',
-              title: '📺 Tous les panneaux',
-              description: `${billboards.length} panneaux - Meilleure visibilité`,
-            },
-            ...billboards.map((b) => ({
-              id: b.id,
-              title: b.name,
-              description: `${b.address} • ${b.pricePerSlot} F`,
-            })),
-          ],
-        },
-      ],
+      message: `✅ ${contentIds.length} fichier(s) reçu(s) ! Vérification en cours...`,
     });
 
-    // Fallback to text if list fails
-    if (!listResult.success) {
-      let message = `✅ ${contentIds.length} fichier(s) prêt(s) !\n\nChoisissez un panneau:\n\n`;
-      billboards.forEach((b, i) => {
-        message += `${i + 1}. ${b.name} - ${b.pricePerSlot} F\n`;
+    for (const item of pending) {
+      await enqueueValidation({
+        contentId: item.contentId,
+        originalUrl: item.mediaUrl,
       });
-      message += '\nRépondez avec le numéro ou "tous"';
-      await wati.sendMessage({ phone, message });
     }
 
-    console.log(`[BILLBOARD_WORKER] Batch processed for ${phone}: ${contentIds.length} files`);
+    console.log(`[BILLBOARD_WORKER] Batch queued for validation: ${phone}, ${contentIds.length} files`);
   } catch (error) {
     console.error(`[BILLBOARD_WORKER] Batch processing error for ${phone}:`, error);
 

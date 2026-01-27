@@ -15,7 +15,7 @@ import {
   enqueueModeration,
   enqueueTranscoding,
 } from '../queues/billboard-queue';
-import { validateMedia } from '../billboard/validation';
+import { validateMedia, quickValidate } from '../billboard/validation';
 import { moderateImage, moderateVideo } from '../billboard/moderation';
 import { transcodeVideo, imageToVideo as ffmpegImageToVideo, RESOLUTIONS } from '../billboard/transcoding';
 import { uploadBillboardMedia, imageToVideo as cloudinaryImageToVideo, isCloudinaryConfigured } from '../cloudinary';
@@ -39,8 +39,33 @@ async function processValidation(
   console.log(`[BILLBOARD_WORKER] Validating content: ${contentId}`);
 
   try {
-    // Run validation
-    const result = await validateMedia(originalUrl);
+    // Run full validation (requires FFprobe)
+    let result = await validateMedia(originalUrl);
+
+    // If FFprobe is not available, fall back to quick validation
+    // Quick validation checks format + file size only, then lets moderation handle content safety
+    if (!result.valid && result.errors.some(e => e.includes('FFprobe'))) {
+      console.log(`[BILLBOARD_WORKER] FFprobe unavailable, using quick validation for ${contentId}`);
+      const quick = await quickValidate(originalUrl);
+      if (quick.valid && quick.mediaType) {
+        // Treat as valid — moderation will handle content checking
+        result = {
+          valid: true,
+          mediaType: quick.mediaType,
+          metadata: null,
+          errors: [],
+          warnings: ['FFprobe unavailable, skipped resolution check'],
+        };
+      } else {
+        result = {
+          valid: false,
+          mediaType: null,
+          metadata: null,
+          errors: [quick.error || 'File validation failed'],
+          warnings: [],
+        };
+      }
+    }
 
     if (!result.valid) {
       // Mark as rejected

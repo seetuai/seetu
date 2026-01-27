@@ -169,7 +169,7 @@ function parseAnalysis(analysisText: string): {
 export async function moderateImage(imageUrl: string): Promise<ModerationResult> {
   try {
     const genAI = getGeminiClient();
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     // Get image as base64
     const imageData = await imageUrlToBase64(imageUrl);

@@ -440,10 +440,16 @@ async function notifyModerationResult(
     const session = await getSession(content.whatsappPhone);
     if (!session) return;
 
+    // Guard: only proceed if session is still in AWAITING_MEDIA state.
+    // This prevents duplicate billboard lists when multiple moderation jobs
+    // finish concurrently and both pass the "stillPending === 0" check.
+    if (session.state !== 'AWAITING_MEDIA') {
+      console.log(`[BILLBOARD_WORKER] Session ${content.whatsappPhone} already in ${session.state}, skipping duplicate notification`);
+      return;
+    }
+
     const batchContentIds = session.data.contentIds || [];
     if (batchContentIds.length === 0) return;
-
-    // No per-file notification — wait for all items to finish, then send one batch summary
 
     // Check status of all batch items
     const allContents = await prisma.billboardContent.findMany({
@@ -474,6 +480,10 @@ async function notifyModerationResult(
       return;
     }
 
+    // Transition FIRST to prevent race condition — other concurrent calls
+    // will see AWAITING_BILLBOARD and bail out via the guard above.
+    await updateSessionState(content.whatsappPhone, 'AWAITING_BILLBOARD', { contentIds: approvedIds });
+
     // Update session with only approved content IDs
     await setContentIds(content.whatsappPhone, approvedIds);
 
@@ -484,9 +494,6 @@ async function notifyModerationResult(
         message: `✅ ${approvedIds.length} fichier(s) approuvé(s), ${rejectedCount} refusé(s).`,
       });
     }
-
-    // Transition to AWAITING_BILLBOARD and send billboard list
-    await updateSessionState(content.whatsappPhone, 'AWAITING_BILLBOARD', { contentIds: approvedIds });
 
     // Send billboard selection list
     const billboards = await prisma.billboard.findMany({

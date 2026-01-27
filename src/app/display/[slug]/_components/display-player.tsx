@@ -23,6 +23,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cursorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // eslint-disable-next-line no-undef
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
@@ -35,7 +36,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
     if (debug) {
       store.setDebugVisible(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, []);
 
   // Request wake lock to prevent screen sleep
@@ -51,7 +52,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
         store.log('warn', 'Wake lock request failed');
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, []);
 
   // Re-acquire wake lock on visibility change
@@ -68,7 +69,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, []);
 
   // Online/offline listeners
@@ -88,7 +89,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, []);
 
   // Cursor auto-hide on mouse movement
@@ -146,7 +147,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       store.log('error', `fetchCurrent failed: ${msg}`);
       store.setPlayerState('error');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, [config.apiKey]);
 
   // Preload next content
@@ -164,7 +165,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       store.log('warn', 'Failed to preload next content');
       store.setNextContent(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, [config.apiKey]);
 
   // Poll for new content when queue is empty
@@ -192,7 +193,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
         // Silently continue polling
       }
     }, config.slotDurationSecs * 1000);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, [config.apiKey, config.slotDurationSecs]);
 
   // Handle video ended - transition to next
@@ -233,7 +234,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       store.log('info', 'Queue exhausted, showing default');
       startDefaultPoll();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, [config.apiKey]);
 
   // Handle video load error - skip to next
@@ -250,7 +251,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       store.setPlayerState('default_content');
       startDefaultPoll();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, []);
 
   // Heartbeat interval
@@ -271,7 +272,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, [config.apiKey]);
 
   // Main initialization
@@ -281,7 +282,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
 
     requestWakeLock();
     loadCurrentContent();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, []);
 
   // Cleanup on unmount
@@ -315,7 +316,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       store.toggleDebug();
       tapCountRef.current = 0;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, []);
 
   return (

@@ -64,7 +64,7 @@ export function VideoCanvas({
         log('warn', 'Content autoplay blocked');
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, [currentContent?.mediaUrl, playerState]);
 
   // Preload next content into inactive slot
@@ -88,7 +88,7 @@ export function VideoCanvas({
       video.load();
       setSlotReady(activeSlot === 'A' ? 'B' : 'A', false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, [nextContent?.mediaUrl]);
 
   // Handle video ended on active slot
@@ -102,7 +102,7 @@ export function VideoCanvas({
   const handleError = useCallback(() => {
     log('error', 'Video element error');
     onVideoError();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, [onVideoError]);
 
   // Handle inactive video can play (preload ready)
@@ -110,7 +110,7 @@ export function VideoCanvas({
     const slot = activeSlot === 'A' ? 'B' : 'A';
     setSlotReady(slot, true);
     log('info', `Slot ${slot} preloaded and ready`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   }, [activeSlot]);
 
   const sharedProps = {

@@ -37,7 +37,7 @@ async function fetchWithRetry<T>(
   throw lastError!;
 }
 
-function buildHeaders(apiKey: string): HeadersInit {
+function buildHeaders(apiKey: string): Record<string, string> {
   return {
     'X-Billboard-Key': apiKey,
     'Content-Type': 'application/json',

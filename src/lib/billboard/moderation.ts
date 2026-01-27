@@ -178,14 +178,14 @@ export async function moderateImage(imageUrl: string): Promise<ModerationResult>
     const prompt = `You are a content moderation system for digital billboards in Dakar, Senegal.
 Analyze this image for the following content categories and provide a confidence score (0.0-1.0) for each:
 
-1. NUDITY: Any nudity, partial nudity, sexually suggestive content
-2. VIOLENCE: Gore, blood, weapons, violent imagery
+1. NUDITY: Explicit nudity, sexual acts, pornographic content. Do NOT flag normal photos of people (selfies, portraits, people in regular clothing, swimwear in appropriate context). Only flag genuinely sexual or pornographic content.
+2. VIOLENCE: Gore, blood, weapons, graphic violent imagery
 3. HATE_SPEECH: Racist symbols, hate speech text, discriminatory content
-4. POLITICAL: Political party logos, election content, political figures, propaganda
-5. EXPLICIT_TEXT: Profanity, vulgar language visible in the image
-6. DRUGS_ALCOHOL: Drug paraphernalia, alcohol promotion, smoking
+4. POLITICAL: Political party logos, election campaign content, political propaganda
+5. EXPLICIT_TEXT: Profanity, vulgar language clearly visible in the image
+6. DRUGS_ALCOHOL: Drug paraphernalia, illegal substance promotion
 7. GAMBLING: Casino, betting, lottery promotion
-8. COPYRIGHT: Visible trademarked logos, copyrighted content (excluding the product itself)
+8. COPYRIGHT: Visible trademarked logos, copyrighted content (excluding the advertised product itself)
 
 For each category, respond in this exact format:
 CATEGORY: confidence_score (0.0-1.0) | detected: yes/no | notes: brief description
@@ -195,8 +195,7 @@ OVERALL_RISK: low/medium/high
 RECOMMENDATION: approved/rejected/review_required
 REJECTION_REASON: (only if rejected or review required)
 
-Be strict but fair - this is for public billboard display in a major African city.
-Cultural context: Senegal is a predominantly Muslim country with conservative public standards.`;
+IMPORTANT: Most advertising content is normal and should be APPROVED. Only reject content that is clearly inappropriate for public display. Regular photos of people, selfies, product shots, screenshots, and brand promotions are all acceptable.`;
 
     const result = await model.generateContent([
       {

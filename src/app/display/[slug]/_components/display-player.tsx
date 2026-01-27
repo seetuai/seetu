@@ -192,9 +192,9 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       } catch {
         // Silently continue polling
       }
-    }, config.slotDurationSecs * 1000);
+    }, 15_000); // Poll every 15s when queue is empty
   // eslint-disable-next-line
-  }, [config.apiKey, config.slotDurationSecs]);
+  }, [config.apiKey]);
 
   // Handle video ended - transition to next
   const handleVideoEnded = useCallback(async () => {

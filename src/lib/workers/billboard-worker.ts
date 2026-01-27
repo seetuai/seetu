@@ -18,7 +18,7 @@ import {
 import { validateMedia, quickValidate } from '../billboard/validation';
 import { moderateImage, moderateVideo } from '../billboard/moderation';
 import { transcodeVideo, imageToVideo as ffmpegImageToVideo, RESOLUTIONS } from '../billboard/transcoding';
-import { uploadBillboardMedia, imageToVideo as cloudinaryImageToVideo, isCloudinaryConfigured } from '../cloudinary';
+import { uploadBillboardMedia, imageToVideo as cloudinaryImageToVideo, isCloudinaryConfigured, getMediaMetadata as getCloudinaryMetadata } from '../cloudinary';
 import { prisma } from '../prisma';
 import { addContentToQueues } from '../billboard/payments';
 import { ContentStatus } from '@prisma/client';
@@ -42,28 +42,49 @@ async function processValidation(
     // Run full validation (requires FFprobe)
     let result = await validateMedia(originalUrl);
 
-    // If FFprobe is not available, fall back to quick validation
-    // Quick validation checks format + file size only, then lets moderation handle content safety
+    // If FFprobe is not available, fall back to Cloudinary for metadata extraction
     if (!result.valid && result.errors.some(e => e.includes('FFprobe'))) {
-      console.log(`[BILLBOARD_WORKER] FFprobe unavailable, using quick validation for ${contentId}`);
-      const quick = await quickValidate(originalUrl);
-      if (quick.valid && quick.mediaType) {
-        // Treat as valid — moderation will handle content checking
+      console.log(`[BILLBOARD_WORKER] FFprobe unavailable, using Cloudinary metadata for ${contentId}`);
+      const cloudMeta = await getCloudinaryMetadata(originalUrl);
+      if (cloudMeta.valid && cloudMeta.mediaType) {
         result = {
           valid: true,
-          mediaType: quick.mediaType,
-          metadata: null,
+          mediaType: cloudMeta.mediaType,
+          metadata: {
+            format: cloudMeta.format || null,
+            codec: null,
+            width: cloudMeta.width || null,
+            height: cloudMeta.height || null,
+            duration: cloudMeta.duration || null,
+            frameRate: null,
+            bitrate: null,
+            fileSize: null,
+            hasAudio: false,
+            audioCodec: null,
+          },
           errors: [],
-          warnings: ['FFprobe unavailable, skipped resolution check'],
+          warnings: ['Metadata from Cloudinary (FFprobe unavailable)'],
         };
       } else {
-        result = {
-          valid: false,
-          mediaType: null,
-          metadata: null,
-          errors: [quick.error || 'File validation failed'],
-          warnings: [],
-        };
+        // Cloudinary also failed — try quickValidate as last resort
+        const quick = await quickValidate(originalUrl);
+        if (quick.valid && quick.mediaType) {
+          result = {
+            valid: true,
+            mediaType: quick.mediaType,
+            metadata: null,
+            errors: [],
+            warnings: ['No metadata available (FFprobe + Cloudinary unavailable)'],
+          };
+        } else {
+          result = {
+            valid: false,
+            mediaType: null,
+            metadata: null,
+            errors: [quick.error || cloudMeta.error || 'File validation failed'],
+            warnings: [],
+          };
+        }
       }
     }
 

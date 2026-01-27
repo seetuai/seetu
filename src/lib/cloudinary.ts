@@ -278,6 +278,57 @@ export function getBillboardUrl(
 }
 
 /**
+ * Get media metadata via Cloudinary (width, height, duration, format)
+ * Lightweight alternative to FFprobe — uploads for analysis, then deletes
+ */
+export async function getMediaMetadata(fileUrl: string): Promise<{
+  valid: boolean;
+  mediaType: 'image' | 'video' | null;
+  width?: number;
+  height?: number;
+  duration?: number;
+  format?: string;
+  error?: string;
+}> {
+  if (!isCloudinaryConfigured()) {
+    return { valid: false, mediaType: null, error: 'Cloudinary not configured' };
+  }
+
+  ensureConfigured();
+
+  try {
+    // Upload with resource_type auto to detect type
+    const result = await cloudinary.uploader.upload(fileUrl, {
+      resource_type: 'auto',
+      folder: 'seetu/validation-temp',
+    });
+
+    const isVideo = result.resource_type === 'video';
+    const mediaType: 'image' | 'video' = isVideo ? 'video' : 'image';
+
+    // Clean up — delete the temp upload
+    cloudinary.uploader.destroy(result.public_id, {
+      resource_type: result.resource_type,
+    }).catch(() => { /* ignore cleanup errors */ });
+
+    return {
+      valid: true,
+      mediaType,
+      width: result.width,
+      height: result.height,
+      duration: result.duration || undefined,
+      format: result.format,
+    };
+  } catch (error) {
+    return {
+      valid: false,
+      mediaType: null,
+      error: error instanceof Error ? error.message : 'Cloudinary metadata extraction failed',
+    };
+  }
+}
+
+/**
  * Check if Cloudinary is configured
  */
 export function isCloudinaryConfigured(): boolean {

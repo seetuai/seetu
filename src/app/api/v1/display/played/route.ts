@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { markAsPlaying, markAsCompleted, getNextContent } from '@/lib/billboard/queue-manager';
-import { onPlaybackComplete } from '@/lib/billboard/whatsapp/message-handler';
+import { onPlaybackComplete, onPlaybackCompleteNotify } from '@/lib/billboard/whatsapp/message-handler';
 
 export async function POST(request: NextRequest) {
   try {
@@ -91,15 +91,23 @@ export async function POST(request: NextRequest) {
       // Mark as completed
       await markAsCompleted(queueId, proofUrl);
 
-      // Notify WhatsApp user if applicable
-      if (queueItem.content.whatsappPhone && proofUrl) {
+      // Notify WhatsApp user if applicable (always notify, with or without proof)
+      if (queueItem.content.whatsappPhone) {
         try {
-          await onPlaybackComplete(
-            queueItem.content.id,
-            billboard.name,
-            proofUrl,
-            new Date()
-          );
+          if (proofUrl) {
+            await onPlaybackComplete(
+              queueItem.content.id,
+              billboard.name,
+              proofUrl,
+              new Date()
+            );
+          } else {
+            await onPlaybackCompleteNotify(
+              queueItem.content.id,
+              billboard.name,
+              new Date()
+            );
+          }
         } catch (error) {
           console.error('[DISPLAY] Failed to notify WhatsApp:', error);
           // Don't fail the request for notification errors

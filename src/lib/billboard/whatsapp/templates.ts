@@ -167,6 +167,65 @@ Preuve de diffusion: ${proofUrl}
 Merci d'avoir choisi Seetu Billboards!`;
 
 // ═══════════════════════════════════════════════════════════════
+// SCHEDULING
+// ═══════════════════════════════════════════════════════════════
+
+export const formatSchedulePrompt = (
+  billboards: Array<{ name: string; queueLength: number; estimatedPlayTime: Date }>
+) => {
+  let message = `Quand souhaitez-vous diffuser ?\n\n`;
+
+  for (const b of billboards) {
+    const timeStr = formatTime(b.estimatedPlayTime);
+    const queueInfo = b.queueLength > 0 ? `${b.queueLength} en attente` : 'disponible';
+    message += `📺 ${b.name} (${queueInfo}) — prochaine diffusion ~${timeStr}\n`;
+  }
+
+  return message;
+};
+
+export const formatScheduleNowConfirmation = (
+  billboards: Array<{ name: string; estimatedPlayTime: Date }>
+) => {
+  const names = billboards.map(b => b.name).join(', ');
+  const times = billboards.map(b => `~${formatTime(b.estimatedPlayTime)}`).join(', ');
+  return `Diffusion prévue vers ${times} sur ${names}. Passons au paiement.`;
+};
+
+export const formatScheduleLaterConfirmation = (
+  scheduledDate: Date,
+  billboardNames: string
+) => {
+  return `Programmé pour ${formatDateTime(scheduledDate)} sur ${billboardNames}. Passons au paiement.`;
+};
+
+export const SCHEDULE_DATE_PROMPT = `Quand diffuser ? Répondez avec la date et l'heure.
+
+Exemples: demain 14h, lundi 9h, 28/01 18h`;
+
+export const SCHEDULE_DATE_INVALID = `Je n'ai pas compris la date. Réessayez avec un format simple.
+
+Exemples: demain 14h, lundi 9h, 28/01 18h, 28 janvier 18h`;
+
+export const SCHEDULE_DATE_PAST = `La date doit être dans le futur. Réessayez.`;
+
+export const SCHEDULE_DATE_TOO_FAR = `La date doit être dans les 7 prochains jours. Réessayez.`;
+
+// ═══════════════════════════════════════════════════════════════
+// PLAYBACK NOTIFICATION (text-only, no proof image)
+// ═══════════════════════════════════════════════════════════════
+
+export const formatPlaybackNotification = (
+  billboardName: string,
+  playedAt: Date
+) => `Votre publicité a été diffusée !
+
+📺 ${billboardName}
+🕐 ${formatDateTime(playedAt)}
+
+Merci d'avoir choisi Seetu Billboards !`;
+
+// ═══════════════════════════════════════════════════════════════
 // ERROR & HELP
 // ═══════════════════════════════════════════════════════════════
 

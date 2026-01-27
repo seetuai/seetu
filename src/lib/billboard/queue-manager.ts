@@ -386,6 +386,27 @@ export async function reorderQueue(
 }
 
 /**
+ * Get estimated wait time for a new item added to a billboard's queue
+ */
+export async function getEstimatedWaitTime(
+  billboardId: string
+): Promise<{ queueLength: number; estimatedPlayTime: Date }> {
+  const billboard = await prisma.billboard.findUnique({
+    where: { id: billboardId },
+    select: { slotDurationSecs: true },
+  });
+  const queueLength = await prisma.billboardQueue.count({
+    where: { billboardId, status: { in: ['queued', 'playing'] } },
+  });
+  const nextPosition = queueLength + 1;
+  const estimatedPlayTime = calculateEstimatedPlayTime(
+    nextPosition,
+    billboard?.slotDurationSecs || 300
+  );
+  return { queueLength, estimatedPlayTime };
+}
+
+/**
  * Calculate estimated play time based on position
  */
 function calculateEstimatedPlayTime(

@@ -22,6 +22,7 @@ export interface CreatePaymentParams {
   amountCfa: number;
   userId?: string;
   whatsappPhone?: string;
+  scheduledFor?: Date;
 }
 
 export interface PaymentResult {
@@ -37,7 +38,7 @@ export interface PaymentResult {
 export async function createBillboardPayment(
   params: CreatePaymentParams
 ): Promise<PaymentResult> {
-  const { contentId, contentIds: inputContentIds, billboardIds, amountCfa, userId, whatsappPhone } = params;
+  const { contentId, contentIds: inputContentIds, billboardIds, amountCfa, userId, whatsappPhone, scheduledFor } = params;
 
   // Support both legacy single contentId and new batch contentIds
   const contentIds = inputContentIds?.length ? inputContentIds : (contentId ? [contentId] : []);
@@ -67,6 +68,7 @@ export async function createBillboardPayment(
       amountCfa,
       paymentMethod: 'wave', // Default, will be updated by payment provider
       status: 'pending',
+      scheduledFor: scheduledFor || null,
     },
   });
 
@@ -205,7 +207,7 @@ export async function addContentToQueues(contentId: string): Promise<void> {
   // Check both legacy contentId field and new contentIds array
   let payment = await prisma.billboardPayment.findFirst({
     where: { contentId },
-    select: { billboardIds: true },
+    select: { billboardIds: true, scheduledFor: true },
   });
 
   // If not found by contentId, check contentIds array
@@ -214,7 +216,7 @@ export async function addContentToQueues(contentId: string): Promise<void> {
       where: {
         contentIds: { has: contentId },
       },
-      select: { billboardIds: true },
+      select: { billboardIds: true, scheduledFor: true },
     });
   }
 
@@ -223,8 +225,8 @@ export async function addContentToQueues(contentId: string): Promise<void> {
     return;
   }
 
-  // Add to queue for each billboard
-  await addToQueue(contentId, payment.billboardIds);
+  // Add to queue for each billboard, passing scheduledFor if set
+  await addToQueue(contentId, payment.billboardIds, payment.scheduledFor || undefined);
 
   console.log(
     `[BILLBOARD_PAYMENT] Content ${contentId} added to ${payment.billboardIds.length} queues`

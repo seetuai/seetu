@@ -37,6 +37,8 @@ export interface SessionData {
   lastMediaUrl?: string;
   pendingMedia?: PendingMedia[];
   batchStartedAt?: string; // ISO string for JSON compatibility
+  scheduledFor?: string; // ISO string or null for "now"
+  awaitingDateInput?: boolean; // Flag for when user picked "Programmer" and we're waiting for free-text date
 }
 
 export interface Session {
@@ -354,7 +356,8 @@ export function isValidTransition(
   const validTransitions: Record<WhatsAppSessionState, WhatsAppSessionState[]> = {
     START: ['AWAITING_MEDIA', 'START'],
     AWAITING_MEDIA: ['AWAITING_BILLBOARD', 'START', 'EXPIRED'],
-    AWAITING_BILLBOARD: ['AWAITING_PAYMENT', 'AWAITING_MEDIA', 'START', 'EXPIRED'],
+    AWAITING_BILLBOARD: ['AWAITING_SCHEDULE', 'AWAITING_PAYMENT', 'AWAITING_MEDIA', 'START', 'EXPIRED'],
+    AWAITING_SCHEDULE: ['AWAITING_PAYMENT', 'AWAITING_BILLBOARD', 'START', 'EXPIRED'],
     AWAITING_PAYMENT: ['CONFIRMED', 'AWAITING_BILLBOARD', 'START', 'EXPIRED'],
     CONFIRMED: ['START'], // Can start a new order
     EXPIRED: ['START'], // Can restart
@@ -371,6 +374,7 @@ export function getStateDescription(state: WhatsAppSessionState): string {
     START: 'Démarrage',
     AWAITING_MEDIA: "En attente d'image/vidéo",
     AWAITING_BILLBOARD: 'Sélection des panneaux',
+    AWAITING_SCHEDULE: "Choix de l'horaire",
     AWAITING_PAYMENT: 'En attente de paiement',
     CONFIRMED: 'Commande confirmée',
     EXPIRED: 'Session expirée',

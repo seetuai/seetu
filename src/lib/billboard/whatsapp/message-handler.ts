@@ -22,7 +22,7 @@ import { scheduleBatchProcessing } from '../../queues/billboard-queue';
 import * as templates from './templates';
 import { prisma } from '../../prisma';
 import { getBillboardPricing, calculatePrice, formatPriceCFA } from '../pricing';
-import { getContentQueuePositions } from '../queue-manager';
+import { getContentQueuePositions, getEstimatedWaitTime } from '../queue-manager';
 import { uploadBuffer, BUCKETS } from '../../storage';
 import { createBillboardPayment } from '../payments';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -66,6 +66,9 @@ export async function handleIncomingMessage(
 
       case 'AWAITING_BILLBOARD':
         return await handleBillboardSelection(message, session);
+
+      case 'AWAITING_SCHEDULE':
+        return await handleScheduleSelection(message, session);
 
       case 'AWAITING_PAYMENT':
         return await handlePaymentState(message, session);
@@ -501,26 +504,211 @@ async function handleBillboardSelection(
     return { success: false, error: 'No content ID in session' };
   }
 
-  // Calculate price: price per content × number of contents
+  // Get ETA for each selected billboard
+  const billboardETAs: Array<{ name: string; queueLength: number; estimatedPlayTime: Date }> = [];
+  for (const b of selectedBillboards) {
+    const eta = await getEstimatedWaitTime(b.id);
+    billboardETAs.push({
+      name: b.name,
+      queueLength: eta.queueLength,
+      estimatedPlayTime: eta.estimatedPlayTime,
+    });
+  }
+
+  // Send schedule prompt with ETA info + buttons
+  const scheduleMessage = templates.formatSchedulePrompt(billboardETAs);
+
+  await wati.sendButtons({
+    phone: message.phone,
+    body: scheduleMessage,
+    buttons: [
+      { type: 'reply', reply: { id: 'schedule_now', title: 'Maintenant' } },
+      { type: 'reply', reply: { id: 'schedule_later', title: 'Programmer' } },
+    ],
+  });
+
+  await updateSessionState(message.phone, 'AWAITING_SCHEDULE');
+
+  return { success: true };
+}
+
+/**
+ * Handle schedule selection state (Maintenant / Programmer)
+ */
+async function handleScheduleSelection(
+  message: WatiMessage,
+  session: Session
+): Promise<HandlerResult> {
+  const wati = getWatiClient();
+
+  // Get selected billboard IDs and content IDs from session
+  const billboardIds = session.data.selectedBillboardIds || [];
+  const contentIds = session.data.contentIds || (session.currentContentId ? [session.currentContentId] : []);
+
+  if (billboardIds.length === 0 || contentIds.length === 0) {
+    await wati.sendMessage({
+      phone: message.phone,
+      message: '❌ Erreur. Envoyez "reprendre" pour recommencer.',
+    });
+    return { success: false, error: 'Missing session data' };
+  }
+
+  // Get billboard names for messages
+  const billboards = await prisma.billboard.findMany({
+    where: { id: { in: billboardIds } },
+    select: { id: true, name: true },
+  });
+  const billboardNames = billboards.map(b => b.name).join(', ');
+
+  // Determine user intent from button reply, text, or list reply
+  const buttonId = (message.type === 'button_reply' && message.buttonId) ? message.buttonId.toLowerCase() : '';
+  const buttonText = (message.type === 'button_reply' && message.buttonText) ? message.buttonText.toLowerCase() : '';
+  const text = (message.type === 'text' && message.text) ? message.text.toLowerCase().trim() : '';
+  const listTitle = (message.type === 'list_reply' && message.listTitle) ? message.listTitle.toLowerCase() : '';
+
+  const isNow = buttonId.includes('now') || buttonId.includes('maintenant') ||
+    buttonText.includes('maintenant') || text === 'maintenant' ||
+    listTitle.includes('maintenant');
+
+  const isLater = buttonId.includes('later') || buttonId.includes('programmer') ||
+    buttonText.includes('programmer') || text === 'programmer' ||
+    listTitle.includes('programmer');
+
+  // Handle "Maintenant"
+  if (isNow) {
+    // Get ETA for selected billboards
+    const etaInfos: Array<{ name: string; estimatedPlayTime: Date }> = [];
+    for (const bId of billboardIds) {
+      const eta = await getEstimatedWaitTime(bId);
+      const bName = billboards.find(b => b.id === bId)?.name || '';
+      etaInfos.push({ name: bName, estimatedPlayTime: eta.estimatedPlayTime });
+    }
+
+    // Send ETA confirmation
+    await wati.sendMessage({
+      phone: message.phone,
+      message: templates.formatScheduleNowConfirmation(etaInfos),
+    });
+
+    // Clear scheduledFor and proceed to payment
+    await updateSessionState(message.phone, 'AWAITING_SCHEDULE', { scheduledFor: undefined, awaitingDateInput: false });
+    return await proceedToPayment(message.phone, session);
+  }
+
+  // Handle "Programmer"
+  if (isLater) {
+    await updateSessionState(message.phone, 'AWAITING_SCHEDULE', { awaitingDateInput: true });
+    await wati.sendMessage({
+      phone: message.phone,
+      message: templates.SCHEDULE_DATE_PROMPT,
+    });
+    return { success: true };
+  }
+
+  // Handle free-text date input (when awaitingDateInput is true)
+  if (session.data.awaitingDateInput && (message.type === 'text' && message.text)) {
+    const parsed = parseFrenchDateTime(message.text.trim());
+
+    if (!parsed) {
+      await wati.sendMessage({
+        phone: message.phone,
+        message: templates.SCHEDULE_DATE_INVALID,
+      });
+      return { success: true };
+    }
+
+    const now = new Date();
+    if (parsed <= now) {
+      await wati.sendMessage({
+        phone: message.phone,
+        message: templates.SCHEDULE_DATE_PAST,
+      });
+      return { success: true };
+    }
+
+    const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    if (parsed > maxDate) {
+      await wati.sendMessage({
+        phone: message.phone,
+        message: templates.SCHEDULE_DATE_TOO_FAR,
+      });
+      return { success: true };
+    }
+
+    // Valid date — store and proceed to payment
+    await updateSessionState(message.phone, 'AWAITING_SCHEDULE', {
+      scheduledFor: parsed.toISOString(),
+      awaitingDateInput: false,
+    });
+
+    await wati.sendMessage({
+      phone: message.phone,
+      message: templates.formatScheduleLaterConfirmation(parsed, billboardNames),
+    });
+
+    return await proceedToPayment(message.phone, session, parsed);
+  }
+
+  // Unrecognized input — re-send buttons
+  await wati.sendButtons({
+    phone: message.phone,
+    body: 'Choisissez une option:',
+    buttons: [
+      { type: 'reply', reply: { id: 'schedule_now', title: 'Maintenant' } },
+      { type: 'reply', reply: { id: 'schedule_later', title: 'Programmer' } },
+    ],
+  });
+
+  return { success: true };
+}
+
+/**
+ * Proceed to payment — extracted from handleBillboardSelection
+ * Creates payment and sends CTA button
+ */
+async function proceedToPayment(
+  phone: string,
+  session: Session,
+  scheduledFor?: Date
+): Promise<HandlerResult> {
+  const wati = getWatiClient();
+
+  const billboardIds = session.data.selectedBillboardIds || [];
+  const contentIds = session.data.contentIds || (session.currentContentId ? [session.currentContentId] : []);
+
+  if (billboardIds.length === 0 || contentIds.length === 0) {
+    await wati.sendMessage({
+      phone,
+      message: '❌ Erreur. Envoyez "reprendre" pour recommencer.',
+    });
+    return { success: false, error: 'Missing session data for payment' };
+  }
+
+  // Calculate price
   const billboardSlots: Record<string, number> = {};
   billboardIds.forEach(id => {
     billboardSlots[id] = 1;
   });
   const pricing = await calculatePrice(billboardSlots);
-
-  // Total amount = price per billboard × number of contents
   const totalAmount = pricing.totalCfa * contentIds.length;
+
+  // Get billboard names
+  const selectedBillboards = await prisma.billboard.findMany({
+    where: { id: { in: billboardIds } },
+    select: { id: true, name: true },
+  });
 
   try {
     const payment = await createBillboardPayment({
       contentIds,
       billboardIds,
       amountCfa: totalAmount,
-      whatsappPhone: message.phone,
+      whatsappPhone: phone,
+      scheduledFor,
     });
 
-    await setPaymentId(message.phone, payment.id);
-    await updateSessionState(message.phone, 'AWAITING_PAYMENT');
+    await setPaymentId(phone, payment.id);
+    await updateSessionState(phone, 'AWAITING_PAYMENT');
 
     // Build recap message
     const billboardNames = selectedBillboards.map(b => b.name).join(', ');
@@ -532,16 +720,13 @@ async function handleBillboardSelection(
       (pricing.discount > 0 ? ` (${pricing.discountReason})` : '') +
       (contentIds.length > 1 ? `\n\n_${pricing.totalCfa} F × ${contentIds.length} ${contentWord}_` : '');
 
-    // Send CTA button for payment (uses approved template)
-    // Template URL should be: https://seetu.ai/api/v1/pay/{{3}}
-    // This redirects to Wave checkout, avoiding URL encoding issues
+    // Send CTA button for payment
     await wati.sendCTAButton({
-      phone: message.phone,
+      phone,
       body: recapBody,
       footer: 'Paiement sécurisé via Wave',
       buttonText: 'Payer maintenant',
       url: payment.checkoutUrl,
-      // Use WATI template with CTA button (URL: https://seetu.ai/api/v1/pay/wave/{{3}})
       templateName: 'payment',
       templateParams: {
         billboardName: billboardNames,
@@ -554,11 +739,110 @@ async function handleBillboardSelection(
   } catch (error) {
     console.error('[WA_HANDLER] Payment creation failed:', error);
     await wati.sendMessage({
-      phone: message.phone,
+      phone,
       message: '❌ Erreur de paiement. Réessayez ou envoyez "support".',
     });
     return { success: false, error: 'Payment creation failed' };
   }
+}
+
+/**
+ * Parse French date/time input into a Date
+ * Handles: "maintenant", "demain 14h", "demain 14h30", "lundi 9h",
+ *          "28/01 18h", "28/01 18:00", "28 jan 18h", "28 janvier 18h"
+ * Returns null if unparseable
+ */
+function parseFrenchDateTime(input: string): Date | null {
+  const text = input.toLowerCase().trim();
+
+  if (text === 'maintenant' || text === 'now') {
+    return new Date();
+  }
+
+  const now = new Date();
+
+  // Extract time part — handles "14h", "14h30", "14:00", "9h"
+  const timeMatch = text.match(/(\d{1,2})\s*[h:]\s*(\d{2})?/);
+  if (!timeMatch) return null;
+
+  const hours = parseInt(timeMatch[1], 10);
+  const minutes = parseInt(timeMatch[2] || '0', 10);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  // Parse the date part
+  let targetDate: Date | null = null;
+
+  // "demain"
+  if (text.includes('demain')) {
+    targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() + 1);
+  }
+  // "aujourd'hui" or "aujourdhui"
+  else if (text.includes("aujourd")) {
+    targetDate = new Date(now);
+  }
+  // Day of week
+  else {
+    const frenchDays: Record<string, number> = {
+      'lundi': 1, 'mardi': 2, 'mercredi': 3, 'jeudi': 4,
+      'vendredi': 5, 'samedi': 6, 'dimanche': 0,
+    };
+
+    for (const [dayName, dayIndex] of Object.entries(frenchDays)) {
+      if (text.includes(dayName)) {
+        targetDate = new Date(now);
+        const currentDay = targetDate.getDay();
+        let daysAhead = dayIndex - currentDay;
+        if (daysAhead <= 0) daysAhead += 7;
+        targetDate.setDate(targetDate.getDate() + daysAhead);
+        break;
+      }
+    }
+  }
+
+  // DD/MM format: "28/01"
+  if (!targetDate) {
+    const ddmmMatch = text.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+    if (ddmmMatch) {
+      const day = parseInt(ddmmMatch[1], 10);
+      const month = parseInt(ddmmMatch[2], 10) - 1; // JS months are 0-based
+      targetDate = new Date(now.getFullYear(), month, day);
+      // If the date is in the past, assume next year
+      if (targetDate < now) {
+        targetDate.setFullYear(targetDate.getFullYear() + 1);
+      }
+    }
+  }
+
+  // "DD mois" format: "28 jan", "28 janvier"
+  if (!targetDate) {
+    const frenchMonths: Record<string, number> = {
+      'jan': 0, 'janvier': 0, 'fév': 1, 'fevrier': 1, 'février': 1,
+      'mar': 2, 'mars': 2, 'avr': 3, 'avril': 3,
+      'mai': 4, 'jun': 5, 'juin': 5, 'jul': 6, 'juillet': 6,
+      'aoû': 7, 'aout': 7, 'août': 7, 'sep': 8, 'septembre': 8,
+      'oct': 9, 'octobre': 9, 'nov': 10, 'novembre': 10, 'déc': 11, 'decembre': 11, 'décembre': 11,
+    };
+
+    for (const [monthName, monthIndex] of Object.entries(frenchMonths)) {
+      if (text.includes(monthName)) {
+        const dayMatch = text.match(/(\d{1,2})\s+/);
+        if (dayMatch) {
+          const day = parseInt(dayMatch[1], 10);
+          targetDate = new Date(now.getFullYear(), monthIndex, day);
+          if (targetDate < now) {
+            targetDate.setFullYear(targetDate.getFullYear() + 1);
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  if (!targetDate) return null;
+
+  targetDate.setHours(hours, minutes, 0, 0);
+  return targetDate;
 }
 
 /**
@@ -844,5 +1128,28 @@ export async function onPlaybackComplete(
     mediaUrl: proofUrl,
     caption: templates.formatPlaybackProof(billboardName, proofUrl, playedAt),
     mediaType: 'image',
+  });
+}
+
+/**
+ * Handle playback complete notification (text-only, no proof image)
+ * Called when content finishes playing but no proof URL is available
+ */
+export async function onPlaybackCompleteNotify(
+  contentId: string,
+  billboardName: string,
+  playedAt: Date
+): Promise<void> {
+  const content = await prisma.billboardContent.findUnique({
+    where: { id: contentId },
+    select: { whatsappPhone: true },
+  });
+
+  if (!content?.whatsappPhone) return;
+
+  const wati = getWatiClient();
+  await wati.sendMessage({
+    phone: content.whatsappPhone,
+    message: templates.formatPlaybackNotification(billboardName, playedAt),
   });
 }

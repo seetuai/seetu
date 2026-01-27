@@ -176,11 +176,11 @@ export function VideoCanvas({
     preload: 'auto' as const,
     crossOrigin: 'anonymous' as const,
     className:
-      'absolute inset-0 w-full h-full object-cover transition-opacity duration-500',
+      'absolute inset-0 w-full h-full object-contain transition-opacity duration-500',
   };
 
   const sharedImageClass =
-    'absolute inset-0 w-full h-full object-cover transition-opacity duration-500';
+    'absolute inset-0 w-full h-full object-contain transition-opacity duration-500';
 
   // Determine what to show for each slot
   const slotAContent = activeSlot === 'A' ? currentContent : nextContent;

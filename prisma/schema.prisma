@@ -150,6 +150,7 @@ enum WhatsAppSessionState {
   START
   AWAITING_MEDIA
   AWAITING_BILLBOARD
+  AWAITING_SCHEDULE
   AWAITING_PAYMENT
   CONFIRMED
   EXPIRED
@@ -1035,6 +1036,7 @@ model BillboardPayment {
   status          BillboardPaymentStatus  @default(pending)
   externalRef     String?                 @unique @map("external_ref")
   checkoutUrl     String?                 @map("checkout_url")
+  scheduledFor    DateTime?               @map("scheduled_for")
 
   createdAt       DateTime                @default(now()) @map("created_at")
   paidAt          DateTime?               @map("paid_at")

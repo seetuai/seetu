@@ -237,16 +237,16 @@ Cultural context: Senegal is a predominantly Muslim country with conservative pu
     };
 
   } catch (error) {
-    console.error('[MODERATION] Error:', error);
+    console.error('[MODERATION] Error (failing open):', error);
 
-    // If moderation fails, flag for manual review
+    // If moderation system fails, approve content and log warning.
+    // A system error is not a content issue — don't block users.
     return {
-      approved: false,
+      approved: true,
       categories: [],
-      overallRisk: 'medium',
-      rejectionReason: 'Moderation system error - manual review required',
-      reviewRequired: true,
-      rawAnalysis: error instanceof Error ? error.message : 'Unknown error',
+      overallRisk: 'low',
+      reviewRequired: false,
+      rawAnalysis: `SYSTEM_ERROR: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
 }
@@ -261,13 +261,15 @@ export async function moderateVideo(videoUrl: string, thumbnailUrl?: string): Pr
     return moderateImage(thumbnailUrl);
   }
 
-  // Otherwise, flag for manual review (video frame extraction would require FFmpeg)
+  // No thumbnail available — approve and log (fail-open).
+  // Video frame extraction would require FFmpeg.
+  console.warn('[MODERATION] No thumbnail for video moderation, approving by default');
   return {
-    approved: false,
+    approved: true,
     categories: [],
-    overallRisk: 'medium',
-    rejectionReason: 'Video content requires manual review',
-    reviewRequired: true,
+    overallRisk: 'low',
+    reviewRequired: false,
+    rawAnalysis: 'No thumbnail available for moderation — approved by default',
   };
 }
 

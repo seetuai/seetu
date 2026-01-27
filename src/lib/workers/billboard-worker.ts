@@ -443,14 +443,7 @@ async function notifyModerationResult(
     const batchContentIds = session.data.contentIds || [];
     if (batchContentIds.length === 0) return;
 
-    if (!approved) {
-      // Notify about rejection
-      const reason = rejectionReason || 'Contenu non conforme';
-      await wati.sendMessage({
-        phone: content.whatsappPhone,
-        message: `❌ Un fichier a été refusé: ${reason}`,
-      });
-    }
+    // No per-file notification — wait for all items to finish, then send one batch summary
 
     // Check status of all batch items
     const allContents = await prisma.billboardContent.findMany({

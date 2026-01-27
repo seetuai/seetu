@@ -171,26 +171,12 @@ Merci d'avoir choisi Seetu Billboards!`;
 // ═══════════════════════════════════════════════════════════════
 
 export const formatSchedulePrompt = (
-  billboards: Array<{ name: string; queueLength: number; estimatedPlayTime: Date }>
+  billboardNames: string
 ) => {
-  let message = `Quand souhaitez-vous diffuser ?\n\n`;
-
-  for (const b of billboards) {
-    const timeStr = formatTime(b.estimatedPlayTime);
-    const queueInfo = b.queueLength > 0 ? `${b.queueLength} en attente` : 'disponible';
-    message += `📺 ${b.name} (${queueInfo}) — prochaine diffusion ~${timeStr}\n`;
-  }
-
-  return message;
+  return `Quand souhaitez-vous diffuser sur ${billboardNames} ?`;
 };
 
-export const formatScheduleNowConfirmation = (
-  billboards: Array<{ name: string; estimatedPlayTime: Date }>
-) => {
-  const names = billboards.map(b => b.name).join(', ');
-  const times = billboards.map(b => `~${formatTime(b.estimatedPlayTime)}`).join(', ');
-  return `Diffusion prévue vers ${times} sur ${names}. Passons au paiement.`;
-};
+export const SCHEDULE_NOW_CONFIRMATION = `Votre pub sera diffusée dès que possible. Passons au paiement.`;
 
 export const formatScheduleLaterConfirmation = (
   scheduledDate: Date,

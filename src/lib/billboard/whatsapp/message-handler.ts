@@ -22,7 +22,7 @@ import { scheduleBatchProcessing } from '../../queues/billboard-queue';
 import * as templates from './templates';
 import { prisma } from '../../prisma';
 import { getBillboardPricing, calculatePrice, formatPriceCFA } from '../pricing';
-import { getContentQueuePositions, getEstimatedWaitTime } from '../queue-manager';
+import { getContentQueuePositions } from '../queue-manager';
 import { uploadBuffer, BUCKETS } from '../../storage';
 import { createBillboardPayment } from '../payments';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -504,19 +504,9 @@ async function handleBillboardSelection(
     return { success: false, error: 'No content ID in session' };
   }
 
-  // Get ETA for each selected billboard
-  const billboardETAs: Array<{ name: string; queueLength: number; estimatedPlayTime: Date }> = [];
-  for (const b of selectedBillboards) {
-    const eta = await getEstimatedWaitTime(b.id);
-    billboardETAs.push({
-      name: b.name,
-      queueLength: eta.queueLength,
-      estimatedPlayTime: eta.estimatedPlayTime,
-    });
-  }
-
-  // Send schedule prompt with ETA info + buttons
-  const scheduleMessage = templates.formatSchedulePrompt(billboardETAs);
+  // Send schedule prompt with buttons (ETA shown after payment, not before)
+  const billboardNames = selectedBillboards.map(b => b.name).join(', ');
+  const scheduleMessage = templates.formatSchedulePrompt(billboardNames);
 
   await wati.sendButtons({
     phone: message.phone,
@@ -576,18 +566,9 @@ async function handleScheduleSelection(
 
   // Handle "Maintenant"
   if (isNow) {
-    // Get ETA for selected billboards
-    const etaInfos: Array<{ name: string; estimatedPlayTime: Date }> = [];
-    for (const bId of billboardIds) {
-      const eta = await getEstimatedWaitTime(bId);
-      const bName = billboards.find(b => b.id === bId)?.name || '';
-      etaInfos.push({ name: bName, estimatedPlayTime: eta.estimatedPlayTime });
-    }
-
-    // Send ETA confirmation
     await wati.sendMessage({
       phone: message.phone,
-      message: templates.formatScheduleNowConfirmation(etaInfos),
+      message: templates.SCHEDULE_NOW_CONFIRMATION,
     });
 
     // Clear scheduledFor and proceed to payment

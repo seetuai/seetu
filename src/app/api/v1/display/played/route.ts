@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
           ? {
               queueId: next.id,
               contentId: next.contentId,
-              mediaUrl: (next.content.processedUrls as Record<string, string>)?.mp4,
+              mediaUrl: ((u) => u?.mp4 || u?.video || u?.url || u?.original)(next.content.processedUrls as Record<string, string>),
             }
           : null,
       });

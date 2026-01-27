@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
         next: {
           queueId: nextItem.id,
           contentId: nextItem.contentId,
-          mediaUrl: processedUrls?.mp4 || processedUrls?.video,
+          mediaUrl: processedUrls?.mp4 || processedUrls?.video || processedUrls?.url || processedUrls?.original,
           mediaType: nextItem.content.mediaType,
           durationSeconds: nextItem.content.durationSeconds || billboard.slotDurationSecs,
           position: nextItem.position,
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       next: {
         queueId: next.id,
         contentId: next.contentId,
-        mediaUrl: processedUrls?.mp4 || processedUrls?.video,
+        mediaUrl: processedUrls?.mp4 || processedUrls?.video || processedUrls?.url || processedUrls?.original,
         mediaType: next.content.mediaType,
         durationSeconds: next.content.durationSeconds || billboard.slotDurationSecs,
         position: next.position,

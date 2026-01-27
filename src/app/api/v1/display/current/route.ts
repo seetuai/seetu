@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     // Get the processed video URL
     const processedUrls = current.content.processedUrls as Record<string, string>;
-    const mediaUrl = processedUrls?.mp4 || processedUrls?.video;
+    const mediaUrl = processedUrls?.mp4 || processedUrls?.video || processedUrls?.url || processedUrls?.original;
 
     return NextResponse.json({
       billboardId: billboard.id,

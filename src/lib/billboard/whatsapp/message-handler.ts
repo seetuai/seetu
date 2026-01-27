@@ -330,7 +330,7 @@ async function parseBillboardSelectionWithLLM(
   }
 
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3.0-flash',
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: 500,

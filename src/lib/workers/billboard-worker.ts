@@ -20,6 +20,7 @@ import { moderateImage, moderateVideo } from '../billboard/moderation';
 import { transcodeVideo, imageToVideo as ffmpegImageToVideo, RESOLUTIONS } from '../billboard/transcoding';
 import { uploadBillboardMedia, imageToVideo as cloudinaryImageToVideo, isCloudinaryConfigured } from '../cloudinary';
 import { prisma } from '../prisma';
+import { addContentToQueues } from '../billboard/payments';
 import { ContentStatus } from '@prisma/client';
 
 // ═══════════════════════════════════════════════════════════════
@@ -233,6 +234,7 @@ async function processTranscoding(
         });
 
         console.log(`[BILLBOARD_WORKER] Cloudinary processing complete: ${contentId}`);
+        await addContentToQueues(contentId);
         return;
       }
 
@@ -278,6 +280,7 @@ async function processTranscoding(
         });
 
         console.log(`[BILLBOARD_WORKER] FFmpeg transcoding complete: ${contentId}`);
+        await addContentToQueues(contentId);
         return;
       }
 
@@ -300,6 +303,7 @@ async function processTranscoding(
     });
 
     console.log(`[BILLBOARD_WORKER] Content ready (no processing): ${contentId}`);
+    await addContentToQueues(contentId);
   } catch (error) {
     console.error(`[BILLBOARD_WORKER] Transcoding error:`, error);
 
@@ -317,6 +321,7 @@ async function processTranscoding(
         durationSeconds: mediaType === 'video' ? 30 : 10,
       },
     });
+    await addContentToQueues(contentId);
   }
 }
 

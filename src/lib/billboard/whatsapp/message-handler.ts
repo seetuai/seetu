@@ -351,7 +351,6 @@ async function verifyIdDocumentWithVision(
       generationConfig: {
         temperature: 0.1,
         maxOutputTokens: 200,
-        responseMimeType: 'application/json',
       },
     });
 
@@ -380,15 +379,27 @@ Critères pour rejeter:
 - Image floue où rien n'est visible
 - Capture d'écran d'un document (accepter quand même si le document est clairement visible)
 
-Retourne un JSON:
-{"is_valid_id": true/false, "document_type": "cni|passport|permis|autre_id|not_id", "confidence": "high|medium|low"}
+Réponds UNIQUEMENT avec un JSON valide, rien d'autre:
+{"is_valid_id": true, "document_type": "cni"}
+
+ou
+
+{"is_valid_id": false, "document_type": "not_id"}
 
 Sois tolérant: en cas de doute raisonnable, accepte le document.`,
     ]);
 
-    const text = result.response.text();
-    const parsed = JSON.parse(text);
+    const text = result.response.text().trim();
+    console.log('[WA_HANDLER] ID doc raw response:', text);
 
+    // Extract JSON from response — handle markdown code blocks or extra text
+    const jsonMatch = text.match(/\{[\s\S]*?\}/);
+    if (!jsonMatch) {
+      console.warn('[WA_HANDLER] No JSON found in ID doc response, allowing through');
+      return true;
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
     console.log('[WA_HANDLER] ID doc validation result:', parsed);
 
     return parsed.is_valid_id === true;

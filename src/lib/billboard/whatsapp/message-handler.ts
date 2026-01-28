@@ -15,6 +15,7 @@ import {
   resetSession,
   addPendingMedia,
   getPendingMedia,
+  markVerified,
   Session,
   SessionData,
 } from './session-manager';
@@ -23,7 +24,7 @@ import * as templates from './templates';
 import { prisma } from '../../prisma';
 import { getBillboardPricing, calculatePrice, formatPriceCFA } from '../pricing';
 import { getContentQueuePositions } from '../queue-manager';
-import { uploadBuffer, BUCKETS } from '../../storage';
+import { uploadBuffer, uploadWhatsAppIdDoc, BUCKETS } from '../../storage';
 import { createBillboardPayment } from '../payments';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -61,6 +62,14 @@ export async function handleIncomingMessage(
     // Route based on session state
     switch (session.state) {
       case 'START':
+        if (!session.isVerified) {
+          return await handleVerificationState(message, session);
+        }
+        return await handleMediaState(message, session);
+
+      case 'AWAITING_VERIFICATION':
+        return await handleVerificationState(message, session);
+
       case 'AWAITING_MEDIA':
         return await handleMediaState(message, session);
 
@@ -204,6 +213,111 @@ async function handleSpecialCommands(
   }
 
   return null; // Not a special command
+}
+
+/**
+ * Handle identity verification state
+ * First-time users must send a photo of their CNI/Passport
+ */
+async function handleVerificationState(
+  message: WatiMessage,
+  session: Session
+): Promise<HandlerResult> {
+  const wati = getWatiClient();
+
+  // If state is START, transition to AWAITING_VERIFICATION
+  if (session.state === 'START') {
+    await updateSessionState(message.phone, 'AWAITING_VERIFICATION');
+
+    // If user already sent an image as their first message, process it immediately
+    if (message.type === 'image') {
+      return await processIdDocument(message, session);
+    }
+
+    // Otherwise ask for ID photo
+    await wati.sendMessage({
+      phone: message.phone,
+      message: templates.VERIFICATION_REQUEST,
+    });
+    return { success: true };
+  }
+
+  // State is AWAITING_VERIFICATION — expect an image
+  if (message.type === 'image') {
+    return await processIdDocument(message, session);
+  }
+
+  // Not an image — send invalid format message
+  await wati.sendMessage({
+    phone: message.phone,
+    message: templates.VERIFICATION_INVALID_FORMAT,
+  });
+  return { success: true };
+}
+
+/**
+ * Process an ID document photo (download, upload to private storage, mark verified)
+ */
+async function processIdDocument(
+  message: WatiMessage,
+  session: Session
+): Promise<HandlerResult> {
+  const wati = getWatiClient();
+
+  if (!message.mediaUrl) {
+    await wati.sendMessage({
+      phone: message.phone,
+      message: templates.VERIFICATION_INVALID_FORMAT,
+    });
+    return { success: true };
+  }
+
+  try {
+    // Download image from WATI (same pattern as media download)
+    const watiApiToken = process.env.WATI_API_TOKEN || '';
+    const fetchHeaders: Record<string, string> = {};
+
+    if (message.mediaUrl.includes('wati.io')) {
+      fetchHeaders['Authorization'] = `Bearer ${watiApiToken}`;
+    }
+
+    console.log('[WA_HANDLER] Downloading ID doc from:', message.mediaUrl.substring(0, 80) + '...');
+    const response = await fetch(message.mediaUrl, { headers: fetchHeaders });
+
+    if (!response.ok) {
+      console.error('[WA_HANDLER] ID doc download failed:', response.status, response.statusText);
+      throw new Error(`Failed to download ID doc: ${response.status}`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+
+    // Upload to private storage
+    const upload = await uploadWhatsAppIdDoc(buffer, message.phone, contentType);
+
+    // Mark user as verified
+    await markVerified(message.phone, upload.path);
+
+    console.log(`[WA_HANDLER] User ${message.phone} identity verified, doc: ${upload.path}`);
+
+    // Send success message
+    await wati.sendMessage({
+      phone: message.phone,
+      message: templates.VERIFICATION_SUCCESS,
+    });
+
+    // Transition to AWAITING_MEDIA
+    await updateSessionState(message.phone, 'AWAITING_MEDIA');
+
+    return { success: true };
+  } catch (error) {
+    console.error('[WA_HANDLER] ID doc processing error:', error);
+    await wati.sendMessage({
+      phone: message.phone,
+      message: 'Erreur lors du traitement de votre document. Veuillez réessayer.',
+    });
+    return { success: false, error: 'ID doc processing failed' };
+  }
 }
 
 // Batch processing delay in milliseconds (3 seconds)

@@ -148,6 +148,7 @@ enum BillboardPaymentStatus {
 
 enum WhatsAppSessionState {
   START
+  AWAITING_VERIFICATION
   AWAITING_MEDIA
   AWAITING_BILLBOARD
   AWAITING_SCHEDULE
@@ -1057,6 +1058,11 @@ model WhatsAppSession {
   lastMessageAt    DateTime              @map("last_message_at")
   expiresAt        DateTime              @map("expires_at")
   createdAt        DateTime              @default(now()) @map("created_at")
+
+  // Identity verification (persists across session resets)
+  isVerified       Boolean               @default(false) @map("is_verified")
+  idDocPath        String?               @map("id_doc_path")
+  verifiedAt       DateTime?             @map("verified_at")
 
   @@index([state])
   @@index([expiresAt])

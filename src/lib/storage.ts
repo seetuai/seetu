@@ -236,6 +236,24 @@ export function isStorageConfigured(): boolean {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// WHATSAPP ADVERTISER VERIFICATION
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Upload WhatsApp advertiser ID document (private - NEVER expose publicly)
+ */
+export async function uploadWhatsAppIdDoc(
+  buffer: Buffer,
+  phone: string,
+  contentType: string = 'image/jpeg'
+): Promise<UploadResult> {
+  const ext = contentType.split('/')[1] || 'jpg';
+  const sanitizedPhone = phone.replace(/[^0-9]/g, '');
+  const filename = `whatsapp-id-docs/${sanitizedPhone}/${Date.now()}.${ext}`;
+  return uploadBufferPrivate(BUCKETS.CREATOR_PRIVATE, buffer, filename, contentType);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CREATOR ECOSYSTEM STORAGE FUNCTIONS
 // ═══════════════════════════════════════════════════════════════
 

@@ -22,6 +22,29 @@ export const RETURNING_USER_MESSAGE = (name?: string) =>
 Envoyez-moi votre nouvelle publicité (image ou vidéo) pour l'afficher sur nos panneaux.`;
 
 // ═══════════════════════════════════════════════════════════════
+// IDENTITY VERIFICATION
+// ═══════════════════════════════════════════════════════════════
+
+export const VERIFICATION_REQUEST = `Bienvenue sur Seetu Billboards !
+
+Avant de diffuser votre publicité, nous avons besoin de vérifier votre identité (une seule fois).
+
+Envoyez une photo de votre *CNI* (Carte Nationale d'Identité) ou *Passeport*.
+
+Cette vérification est obligatoire pour tous les annonceurs.`;
+
+export const VERIFICATION_SUCCESS = `Identité vérifiée ! Merci.
+
+Vous pouvez maintenant diffuser vos publicités sur les panneaux numériques de Dakar.
+
+Envoyez-moi votre image ou vidéo (max 60 secondes, min 1280x720).`;
+
+export const VERIFICATION_INVALID_FORMAT = `Veuillez envoyer une *photo* de votre CNI ou Passeport.
+
+Les formats acceptés sont: JPG, PNG.
+Pas de PDF, vidéo ou document.`;
+
+// ═══════════════════════════════════════════════════════════════
 // MEDIA HANDLING
 // ═══════════════════════════════════════════════════════════════
 

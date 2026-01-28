@@ -49,6 +49,9 @@ export interface Session {
   data: SessionData;
   currentContentId: string | null;
   expiresAt: Date;
+  isVerified: boolean;
+  idDocPath: string | null;
+  verifiedAt: Date | null;
 }
 
 /**
@@ -114,6 +117,9 @@ export async function getOrCreateSession(
     data: session.sessionData as SessionData,
     currentContentId: session.currentContentId,
     expiresAt: session.expiresAt,
+    isVerified: session.isVerified,
+    idDocPath: session.idDocPath,
+    verifiedAt: session.verifiedAt,
   };
 }
 
@@ -155,6 +161,9 @@ export async function updateSessionState(
     data: session.sessionData as SessionData,
     currentContentId: session.currentContentId,
     expiresAt: session.expiresAt,
+    isVerified: session.isVerified,
+    idDocPath: session.idDocPath,
+    verifiedAt: session.verifiedAt,
   };
 }
 
@@ -251,6 +260,9 @@ export async function resetSession(phone: string): Promise<Session> {
     data: {},
     currentContentId: null,
     expiresAt: session.expiresAt,
+    isVerified: session.isVerified,
+    idDocPath: session.idDocPath,
+    verifiedAt: session.verifiedAt,
   };
 }
 
@@ -263,6 +275,16 @@ export async function expireSession(phone: string): Promise<void> {
     data: {
       state: 'EXPIRED',
     },
+  });
+}
+
+/**
+ * Mark a WhatsApp advertiser as identity-verified
+ */
+export async function markVerified(phone: string, idDocPath: string): Promise<void> {
+  await prisma.whatsAppSession.update({
+    where: { phone },
+    data: { isVerified: true, idDocPath, verifiedAt: new Date() },
   });
 }
 
@@ -284,6 +306,9 @@ export async function getSession(phone: string): Promise<Session | null> {
     data: session.sessionData as SessionData,
     currentContentId: session.currentContentId,
     expiresAt: session.expiresAt,
+    isVerified: session.isVerified,
+    idDocPath: session.idDocPath,
+    verifiedAt: session.verifiedAt,
   };
 }
 
@@ -307,6 +332,9 @@ export async function getSessionByContentId(contentId: string): Promise<Session 
     data: session.sessionData as SessionData,
     currentContentId: session.currentContentId,
     expiresAt: session.expiresAt,
+    isVerified: session.isVerified,
+    idDocPath: session.idDocPath,
+    verifiedAt: session.verifiedAt,
   };
 }
 
@@ -354,7 +382,8 @@ export function isValidTransition(
   newState: WhatsAppSessionState
 ): boolean {
   const validTransitions: Record<WhatsAppSessionState, WhatsAppSessionState[]> = {
-    START: ['AWAITING_MEDIA', 'START'],
+    START: ['AWAITING_VERIFICATION', 'AWAITING_MEDIA', 'START'],
+    AWAITING_VERIFICATION: ['AWAITING_MEDIA', 'START', 'EXPIRED'],
     AWAITING_MEDIA: ['AWAITING_BILLBOARD', 'START', 'EXPIRED'],
     AWAITING_BILLBOARD: ['AWAITING_SCHEDULE', 'AWAITING_PAYMENT', 'AWAITING_MEDIA', 'START', 'EXPIRED'],
     AWAITING_SCHEDULE: ['AWAITING_PAYMENT', 'AWAITING_BILLBOARD', 'START', 'EXPIRED'],
@@ -372,6 +401,7 @@ export function isValidTransition(
 export function getStateDescription(state: WhatsAppSessionState): string {
   const descriptions: Record<WhatsAppSessionState, string> = {
     START: 'Démarrage',
+    AWAITING_VERIFICATION: "Vérification d'identité",
     AWAITING_MEDIA: "En attente d'image/vidéo",
     AWAITING_BILLBOARD: 'Sélection des panneaux',
     AWAITING_SCHEDULE: "Choix de l'horaire",

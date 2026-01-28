@@ -72,6 +72,7 @@ export interface DisplayConfig {
   billboardName: string;
   slug: string;
   apiKey: string;
+  displayToken?: string;
   defaultContentUrl: string | null;
   slotDurationSecs: number;
 }

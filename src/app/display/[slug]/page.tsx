@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import type { DisplayConfig } from '@/lib/display/types';
+import { generateDisplayToken } from '@/lib/display/display-token';
 import { DisplayPlayer } from './_components/display-player';
 
 interface DisplayPageProps {
@@ -48,11 +49,14 @@ export default async function DisplayPage({
     );
   }
 
+  const displayToken = generateDisplayToken(billboard.id);
+
   const config: DisplayConfig = {
     billboardId: billboard.id,
     billboardName: billboard.name,
     slug: billboard.slug,
-    apiKey: billboard.apiKey,
+    apiKey: '',
+    displayToken,
     defaultContentUrl: billboard.defaultContentUrl,
     slotDurationSecs: billboard.slotDurationSecs,
   };

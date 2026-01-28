@@ -3,6 +3,7 @@ import { getCurrentUser, getDefaultBrand } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { uploadBuffer, BUCKETS } from '@/lib/storage';
+import { safeFetchImage, isValidImageUrl } from '@/lib/safe-fetch';
 import type { Prisma } from '@prisma/client';
 
 const createProductSchema = z.object({
@@ -132,11 +133,12 @@ export async function POST(req: NextRequest) {
     let thumbnailUrl = imageUrl || '';
 
     if (imageUrl && imageUrl.startsWith('http')) {
+      if (!isValidImageUrl(imageUrl)) {
+        return NextResponse.json({ error: 'Image URL not allowed' }, { status: 400 });
+      }
       try {
         // Fetch the image and upload to Supabase
-        const response = await fetch(imageUrl);
-        const buffer = Buffer.from(await response.arrayBuffer());
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        const { buffer, mimeType: contentType } = await safeFetchImage(imageUrl);
         const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
         const filename = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 

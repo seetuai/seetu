@@ -37,11 +37,16 @@ async function fetchWithRetry<T>(
   throw lastError!;
 }
 
-function buildHeaders(apiKey: string): Record<string, string> {
-  return {
-    'X-Billboard-Key': apiKey,
+function buildHeaders(apiKeyOrToken: string, isToken?: boolean): Record<string, string> {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
+  if (isToken) {
+    headers['X-Display-Token'] = apiKeyOrToken;
+  } else {
+    headers['X-Billboard-Key'] = apiKeyOrToken;
+  }
+  return headers;
 }
 
 function apiBase(): string {
@@ -50,44 +55,48 @@ function apiBase(): string {
 }
 
 export function fetchCurrentContent(
-  apiKey: string
+  apiKeyOrToken: string,
+  isToken?: boolean
 ): Promise<CurrentContentResponse> {
   return fetchWithRetry<CurrentContentResponse>(`${apiBase()}/current`, {
     method: 'GET',
-    headers: buildHeaders(apiKey),
+    headers: buildHeaders(apiKeyOrToken, isToken),
   });
 }
 
 export function fetchNextContent(
-  apiKey: string
+  apiKeyOrToken: string,
+  isToken?: boolean
 ): Promise<NextContentResponse> {
   return fetchWithRetry<NextContentResponse>(`${apiBase()}/next`, {
     method: 'GET',
-    headers: buildHeaders(apiKey),
+    headers: buildHeaders(apiKeyOrToken, isToken),
   });
 }
 
 export function reportPlayed(
-  apiKey: string,
+  apiKeyOrToken: string,
   queueId: string,
-  action: 'start' | 'complete'
+  action: 'start' | 'complete',
+  isToken?: boolean
 ): Promise<PlayedResponse> {
   return fetchWithRetry<PlayedResponse>(`${apiBase()}/played`, {
     method: 'POST',
-    headers: buildHeaders(apiKey),
+    headers: buildHeaders(apiKeyOrToken, isToken),
     body: JSON.stringify({ queueId, action }),
   });
 }
 
 export function sendHeartbeat(
-  apiKey: string,
-  status: 'online' | 'offline' = 'online'
+  apiKeyOrToken: string,
+  status: 'online' | 'offline' = 'online',
+  isToken?: boolean
 ): Promise<HeartbeatResponse> {
   return fetchWithRetry<HeartbeatResponse>(
     `${apiBase()}/heartbeat`,
     {
       method: 'POST',
-      headers: buildHeaders(apiKey),
+      headers: buildHeaders(apiKeyOrToken, isToken),
       body: JSON.stringify({ status }),
     },
     1 // Only 1 retry for heartbeat - non-critical

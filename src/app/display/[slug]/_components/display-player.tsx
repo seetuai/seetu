@@ -115,11 +115,15 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
     };
   }, []);
 
+  // Resolve auth credential: prefer displayToken over apiKey
+  const authKey = config.displayToken || config.apiKey;
+  const isToken = !!config.displayToken;
+
   // Load current content from API
   const loadCurrentContent = useCallback(async () => {
     try {
       store.log('info', 'Fetching current content');
-      const data = await fetchCurrentContent(config.apiKey);
+      const data = await fetchCurrentContent(authKey, isToken);
 
       if (data.content) {
         store.setCurrentContent(data.content);
@@ -128,7 +132,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
 
         // Report start
         try {
-          await reportPlayed(config.apiKey, data.content.queueId, 'start');
+          await reportPlayed(authKey, data.content.queueId, 'start', isToken);
         } catch {
           store.log('warn', 'Failed to report start');
         }
@@ -148,12 +152,12 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       store.setPlayerState('error');
     }
   // eslint-disable-next-line
-  }, [config.apiKey]);
+  }, [authKey]);
 
   // Preload next content
   const preloadNext = useCallback(async () => {
     try {
-      const data = await fetchNextContent(config.apiKey);
+      const data = await fetchNextContent(authKey, isToken);
       if (data.next) {
         store.setNextContent(data.next);
         store.log('info', `Preloaded next: ${data.next.queueId}`);
@@ -166,14 +170,14 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       store.setNextContent(null);
     }
   // eslint-disable-next-line
-  }, [config.apiKey]);
+  }, [authKey]);
 
   // Poll for new content when queue is empty
   const startDefaultPoll = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
-        const data = await fetchCurrentContent(config.apiKey);
+        const data = await fetchCurrentContent(authKey, isToken);
         if (data.content) {
           if (pollRef.current) {
             clearInterval(pollRef.current);
@@ -183,7 +187,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
           store.setPlayerState('playing');
           store.log('info', `New content detected: ${data.content.queueId}`);
           try {
-            await reportPlayed(config.apiKey, data.content.queueId, 'start');
+            await reportPlayed(authKey, data.content.queueId, 'start', isToken);
           } catch {
             store.log('warn', 'Failed to report start');
           }
@@ -194,7 +198,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       }
     }, 15_000); // Poll every 15s when queue is empty
   // eslint-disable-next-line
-  }, [config.apiKey]);
+  }, [authKey]);
 
   // Handle video ended - transition to next
   const handleVideoEnded = useCallback(async () => {
@@ -203,7 +207,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
     if (currentContent) {
       // Report completion
       try {
-        await reportPlayed(config.apiKey, currentContent.queueId, 'complete');
+        await reportPlayed(authKey, currentContent.queueId, 'complete', isToken);
         store.log('info', `Completed: ${currentContent.queueId}`);
       } catch {
         store.log('warn', 'Failed to report complete');
@@ -219,7 +223,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
 
       // Report start for new content
       try {
-        await reportPlayed(config.apiKey, nextContent.queueId, 'start');
+        await reportPlayed(authKey, nextContent.queueId, 'start', isToken);
       } catch {
         store.log('warn', 'Failed to report start');
       }
@@ -235,7 +239,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       startDefaultPoll();
     }
   // eslint-disable-next-line
-  }, [config.apiKey]);
+  }, [authKey]);
 
   // Handle video load error - skip to next
   const handleVideoError = useCallback(() => {
@@ -258,7 +262,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
   useEffect(() => {
     const doHeartbeat = async () => {
       try {
-        const hb = await sendHeartbeat(config.apiKey, 'online');
+        const hb = await sendHeartbeat(authKey, 'online', isToken);
         store.setLastHeartbeat(hb);
       } catch {
         store.log('warn', 'Heartbeat failed');
@@ -273,7 +277,7 @@ export function DisplayPlayer({ config, debug = false }: DisplayPlayerProps) {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
   // eslint-disable-next-line
-  }, [config.apiKey]);
+  }, [authKey]);
 
   // Main initialization
   useEffect(() => {

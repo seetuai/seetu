@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { safeFetchImage, isValidImageUrl } from '@/lib/safe-fetch';
 import type { BrandDNA, SocialSource, LightingStyle, FramingStyle, TextureBias, HumanPresence, VoiceTone, LanguageStyle, VerbalDNA, CaptionStructure, AddressStyle, PrimaryLanguage } from '@/types';
 
 const GEMINI_API_KEY = process.env.GOOGLE_AI_API_KEY;
@@ -8,17 +9,9 @@ const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
 async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
   try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-
-    const buffer = await response.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString('base64');
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-
-    return {
-      data: base64,
-      mimeType: contentType,
-    };
+    if (!isValidImageUrl(url)) return null;
+    const { buffer, mimeType } = await safeFetchImage(url);
+    return { data: buffer.toString('base64'), mimeType };
   } catch (error) {
     console.error('Error fetching image:', url, error);
     return null;

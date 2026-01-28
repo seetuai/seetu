@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
+import { safeFetch, isValidImageUrl } from '@/lib/safe-fetch';
 
 interface MockupZone {
   name: string;
@@ -29,7 +30,7 @@ async function fetchImageBuffer(url: string): Promise<Buffer> {
     return Buffer.from(base64, 'base64');
   }
 
-  const response = await fetch(url);
+  const response = await safeFetch(url, { maxSizeBytes: 10 * 1024 * 1024, timeoutMs: 30000 });
   if (!response.ok) {
     throw new Error(`Failed to fetch image: ${response.status}`);
   }
@@ -57,6 +58,13 @@ export async function POST(req: NextRequest) {
     if (!design_url) {
       return NextResponse.json(
         { error: 'design_url is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!design_url.startsWith('data:') && !isValidImageUrl(design_url)) {
+      return NextResponse.json(
+        { error: 'Invalid design URL' },
         { status: 400 }
       );
     }

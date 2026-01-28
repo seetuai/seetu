@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { v4 as uuidv4 } from 'uuid';
 import sharp from 'sharp';
+import { safeFetch } from '@/lib/safe-fetch';
 
 // Initialize Gemini
 const GEMINI_API_KEY = process.env.GOOGLE_AI_API_KEY;
@@ -36,7 +37,7 @@ async function urlToBase64(url: string): Promise<{ data: string; mimeType: strin
       return { data, mimeType };
     }
 
-    const response = await fetch(url);
+    const response = await safeFetch(url, { maxSizeBytes: 10 * 1024 * 1024, timeoutMs: 30000 });
     if (!response.ok) {
       console.error(`[DESIGN] Failed to fetch image: ${response.status}`);
       return null;

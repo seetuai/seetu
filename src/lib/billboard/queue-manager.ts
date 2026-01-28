@@ -45,14 +45,6 @@ export async function addToQueue(
   const positions: QueuePosition[] = [];
 
   for (const billboardId of billboardIds) {
-    // Get current max position for this billboard
-    const maxPosition = await prisma.billboardQueue.aggregate({
-      where: { billboardId },
-      _max: { position: true },
-    });
-
-    const nextPosition = (maxPosition._max.position || 0) + 1;
-
     // Get billboard info
     const billboard = await prisma.billboard.findUnique({
       where: { id: billboardId },
@@ -64,27 +56,38 @@ export async function addToQueue(
 
     if (!billboard) continue;
 
-    // Create queue entry
-    const queueItem = await prisma.billboardQueue.create({
-      data: {
-        contentId,
-        billboardId,
-        position: nextPosition,
-        status: 'queued',
-        scheduledFor: scheduledFor || null,
-      },
-    });
+    // Use serializable transaction to prevent duplicate positions
+    const result = await prisma.$transaction(async (tx) => {
+      const maxPosition = await tx.billboardQueue.aggregate({
+        where: { billboardId },
+        _max: { position: true },
+      });
+
+      const nextPosition = (maxPosition._max.position || 0) + 1;
+
+      const queueItem = await tx.billboardQueue.create({
+        data: {
+          contentId,
+          billboardId,
+          position: nextPosition,
+          status: 'queued',
+          scheduledFor: scheduledFor || null,
+        },
+      });
+
+      return { queueItem, nextPosition };
+    }, { isolationLevel: 'Serializable' });
 
     // Calculate estimated play time
     const estimatedPlayTime = calculateEstimatedPlayTime(
-      nextPosition,
+      result.nextPosition,
       billboard.slotDurationSecs
     );
 
     positions.push({
       billboardId,
       billboardName: billboard.name,
-      position: nextPosition,
+      position: result.nextPosition,
       estimatedPlayTime,
       status: 'queued',
     });

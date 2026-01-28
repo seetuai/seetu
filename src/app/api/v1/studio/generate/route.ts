@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     // Rate limit check
     const rateLimitKey = getRateLimitKey(user.id, 'ai-generation');
-    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.aiGeneration);
+    const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.aiGeneration);
     const rateLimitError = rateLimitResponse(rateLimit);
     if (rateLimitError) {
       return rateLimitError;

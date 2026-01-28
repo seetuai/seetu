@@ -9,31 +9,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getNextContent, getCurrentlyPlaying } from '@/lib/billboard/queue-manager';
+import { verifyDisplayToken } from '@/lib/display/display-token';
 
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate billboard
+    // Authenticate billboard via API key or display token
     const apiKey = request.headers.get('X-Billboard-Key');
-    if (!apiKey) {
+    const displayToken = request.headers.get('X-Display-Token');
+
+    if (!apiKey && !displayToken) {
       return NextResponse.json(
-        { error: 'Missing X-Billboard-Key header' },
+        { error: 'Missing authentication header' },
         { status: 401 }
       );
     }
 
-    // Find billboard by API key
-    const billboard = await prisma.billboard.findUnique({
-      where: { apiKey },
-      select: {
-        id: true,
-        name: true,
-        slotDurationSecs: true,
-      },
-    });
+    let billboard: { id: string; name: string; slotDurationSecs: number } | null = null;
+
+    if (displayToken) {
+      const tokenResult = verifyDisplayToken(displayToken);
+      if (!tokenResult.valid || !tokenResult.billboardId) {
+        return NextResponse.json(
+          { error: 'Invalid or expired display token' },
+          { status: 401 }
+        );
+      }
+      billboard = await prisma.billboard.findUnique({
+        where: { id: tokenResult.billboardId },
+        select: { id: true, name: true, slotDurationSecs: true },
+      });
+    } else if (apiKey) {
+      billboard = await prisma.billboard.findUnique({
+        where: { apiKey },
+        select: { id: true, name: true, slotDurationSecs: true },
+      });
+    }
 
     if (!billboard) {
       return NextResponse.json(
-        { error: 'Invalid API key' },
+        { error: 'Invalid credentials' },
         { status: 401 }
       );
     }

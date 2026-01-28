@@ -1,15 +1,16 @@
 /**
  * Rate Limiting Utility
- * In-memory rate limiting (for single instance)
- * For multi-instance, use Redis with Upstash
+ * Uses Redis when available (distributed), falls back to in-memory (single instance).
  */
+
+import { redis } from './redis';
 
 interface RateLimitEntry {
   count: number;
   resetAt: number;
 }
 
-// In-memory store (reset on restart)
+// In-memory store (fallback when Redis is unavailable)
 const store = new Map<string, RateLimitEntry>();
 
 // Clean up old entries periodically
@@ -35,9 +36,38 @@ export interface RateLimitResult {
 }
 
 /**
- * Check and consume rate limit
+ * Check rate limit using Redis (atomic INCR + EXPIRE)
  */
-export function checkRateLimit(
+async function checkRateLimitRedis(
+  key: string,
+  config: RateLimitConfig
+): Promise<RateLimitResult> {
+  const count = await redis!.incr(key);
+  if (count === 1) {
+    await redis!.pexpire(key, config.windowMs);
+  }
+
+  if (count > config.requests) {
+    const ttl = await redis!.pttl(key);
+    return {
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + ttl,
+      retryAfterMs: ttl,
+    };
+  }
+
+  return {
+    allowed: true,
+    remaining: config.requests - count,
+    resetAt: Date.now() + config.windowMs,
+  };
+}
+
+/**
+ * Check rate limit using in-memory store (single instance only)
+ */
+function checkRateLimitMemory(
   key: string,
   config: RateLimitConfig
 ): RateLimitResult {
@@ -74,6 +104,25 @@ export function checkRateLimit(
     remaining: config.requests - entry.count,
     resetAt: entry.resetAt,
   };
+}
+
+/**
+ * Check and consume rate limit.
+ * Uses Redis when available, falls back to in-memory.
+ */
+export async function checkRateLimit(
+  key: string,
+  config: RateLimitConfig
+): Promise<RateLimitResult> {
+  if (redis) {
+    try {
+      return await checkRateLimitRedis(key, config);
+    } catch (err) {
+      console.warn('[RATE_LIMIT] Redis error, falling back to in-memory:', err);
+      return checkRateLimitMemory(key, config);
+    }
+  }
+  return checkRateLimitMemory(key, config);
 }
 
 /**

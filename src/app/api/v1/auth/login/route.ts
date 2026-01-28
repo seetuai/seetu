@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
                request.headers.get('x-real-ip') ||
                'unknown';
     const rateLimitKey = getRateLimitKey(null, 'auth-login', ip);
-    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.auth);
+    const rateLimit = await checkRateLimit(rateLimitKey, RATE_LIMITS.auth);
     const rateLimitError = rateLimitResponse(rateLimit);
     if (rateLimitError) {
       return rateLimitError;

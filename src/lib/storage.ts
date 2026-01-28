@@ -36,15 +36,21 @@ export const BUCKETS = {
 
 export type BucketName = typeof BUCKETS[keyof typeof BUCKETS];
 
+// Cache of known-existing buckets to avoid listBuckets() on every upload
+const knownBuckets = new Set<string>();
+
 interface UploadResult {
   url: string;
   path: string;
 }
 
 /**
- * Ensure a bucket exists, create if not
+ * Ensure a bucket exists, create if not.
+ * Uses a module-level cache to avoid calling listBuckets() on every upload.
  */
 async function ensureBucketExists(bucket: BucketName): Promise<void> {
+  if (knownBuckets.has(bucket)) return;
+
   const supabase = getSupabase();
   const { data: buckets } = await supabase.storage.listBuckets();
   const exists = buckets?.some(b => b.name === bucket);
@@ -62,6 +68,8 @@ async function ensureBucketExists(bucket: BucketName): Promise<void> {
     }
     console.log(`[STORAGE] Created bucket: ${bucket}`);
   }
+
+  knownBuckets.add(bucket);
 }
 
 /**
@@ -209,8 +217,11 @@ export async function getSignedUrl(
  */
 export async function ensureBucketsExist(): Promise<void> {
   const supabase = getSupabase();
+  const { data: buckets } = await supabase.storage.listBuckets();
+
   for (const bucketName of Object.values(BUCKETS)) {
-    const { data: buckets } = await supabase.storage.listBuckets();
+    if (knownBuckets.has(bucketName)) continue;
+
     const exists = buckets?.some(b => b.name === bucketName);
 
     if (!exists) {
@@ -225,6 +236,8 @@ export async function ensureBucketsExist(): Promise<void> {
         console.log(`[STORAGE] Created bucket: ${bucketName}`);
       }
     }
+
+    knownBuckets.add(bucketName);
   }
 }
 
@@ -419,36 +432,46 @@ export async function getAssetImageSignedUrls(
  * IMPORTANT: CREATOR_PRIVATE must NOT be public
  */
 export async function ensureCreatorBucketsExist(): Promise<void> {
-  const supabase = getSupabase();
+  const publicKnown = knownBuckets.has(BUCKETS.CREATOR_PUBLIC);
+  const privateKnown = knownBuckets.has(BUCKETS.CREATOR_PRIVATE);
 
-  // Public bucket for thumbnails/avatars
+  if (publicKnown && privateKnown) return;
+
+  const supabase = getSupabase();
   const { data: buckets } = await supabase.storage.listBuckets();
 
-  const publicExists = buckets?.some(b => b.name === BUCKETS.CREATOR_PUBLIC);
-  if (!publicExists) {
-    const { error } = await supabase.storage.createBucket(BUCKETS.CREATOR_PUBLIC, {
-      public: true,
-      fileSizeLimit: 5 * 1024 * 1024, // 5MB for thumbnails
-    });
-    if (error && !error.message.includes('already exists')) {
-      console.error(`[STORAGE] Failed to create bucket ${BUCKETS.CREATOR_PUBLIC}:`, error);
-    } else {
-      console.log(`[STORAGE] Created public bucket: ${BUCKETS.CREATOR_PUBLIC}`);
+  // Public bucket for thumbnails/avatars
+  if (!publicKnown) {
+    const publicExists = buckets?.some(b => b.name === BUCKETS.CREATOR_PUBLIC);
+    if (!publicExists) {
+      const { error } = await supabase.storage.createBucket(BUCKETS.CREATOR_PUBLIC, {
+        public: true,
+        fileSizeLimit: 5 * 1024 * 1024, // 5MB for thumbnails
+      });
+      if (error && !error.message.includes('already exists')) {
+        console.error(`[STORAGE] Failed to create bucket ${BUCKETS.CREATOR_PUBLIC}:`, error);
+      } else {
+        console.log(`[STORAGE] Created public bucket: ${BUCKETS.CREATOR_PUBLIC}`);
+      }
     }
+    knownBuckets.add(BUCKETS.CREATOR_PUBLIC);
   }
 
   // Private bucket for consent docs, IDs, raw assets
-  const privateExists = buckets?.some(b => b.name === BUCKETS.CREATOR_PRIVATE);
-  if (!privateExists) {
-    const { error } = await supabase.storage.createBucket(BUCKETS.CREATOR_PRIVATE, {
-      public: false, // CRITICAL: Must be private
-      fileSizeLimit: 20 * 1024 * 1024, // 20MB for high-res photos + PDFs
-    });
-    if (error && !error.message.includes('already exists')) {
-      console.error(`[STORAGE] Failed to create bucket ${BUCKETS.CREATOR_PRIVATE}:`, error);
-    } else {
-      console.log(`[STORAGE] Created private bucket: ${BUCKETS.CREATOR_PRIVATE}`);
+  if (!privateKnown) {
+    const privateExists = buckets?.some(b => b.name === BUCKETS.CREATOR_PRIVATE);
+    if (!privateExists) {
+      const { error } = await supabase.storage.createBucket(BUCKETS.CREATOR_PRIVATE, {
+        public: false, // CRITICAL: Must be private
+        fileSizeLimit: 20 * 1024 * 1024, // 20MB for high-res photos + PDFs
+      });
+      if (error && !error.message.includes('already exists')) {
+        console.error(`[STORAGE] Failed to create bucket ${BUCKETS.CREATOR_PRIVATE}:`, error);
+      } else {
+        console.log(`[STORAGE] Created private bucket: ${BUCKETS.CREATOR_PRIVATE}`);
+      }
     }
+    knownBuckets.add(BUCKETS.CREATOR_PRIVATE);
   }
 }
 

@@ -26,7 +26,7 @@ import { getBillboardPricing, calculatePrice, formatPriceCFA } from '../pricing'
 import { getContentQueuePositions } from '../queue-manager';
 import { uploadBuffer, uploadWhatsAppIdDoc, BUCKETS } from '../../storage';
 import { createBillboardPayment } from '../payments';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 
 // Initialize Gemini for natural language understanding
 const genAI = process.env.GOOGLE_AI_API_KEY
@@ -333,16 +333,18 @@ async function processIdDocument(
 
 /**
  * Verify an image is a valid identity document using Gemini Vision
- * Returns true if the image looks like a CNI, passport, or similar government ID
+ *
+ * SECURITY: This function is FAIL-CLOSED. If anything goes wrong
+ * (Gemini error, safety block, unparseable response, etc.), it returns false.
+ * Only returns true when Gemini explicitly confirms is_valid_id: true.
  */
 async function verifyIdDocumentWithVision(
   buffer: Buffer,
   contentType: string
 ): Promise<boolean> {
   if (!genAI) {
-    // If Gemini is not configured, skip validation (allow through)
-    console.warn('[WA_HANDLER] Gemini not configured, skipping ID doc validation');
-    return true;
+    console.error('[WA_HANDLER] Gemini not configured — cannot verify ID doc, rejecting');
+    return false;
   }
 
   try {
@@ -350,8 +352,17 @@ async function verifyIdDocumentWithVision(
       model: 'gemini-2.5-flash',
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 200,
+        maxOutputTokens: 1024,
       },
+      // Disable all safety filters so Gemini can analyze ANY image
+      // (weapons, violence, etc.) and tell us it's NOT an ID,
+      // rather than throwing a safety error that we'd have to reject blindly.
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
     });
 
     const base64Image = buffer.toString('base64');
@@ -363,36 +374,36 @@ async function verifyIdDocumentWithVision(
           data: base64Image,
         },
       },
-      `Analyse cette image. Est-ce une pièce d'identité officielle ?
+      `You are a strict identity document validator. Analyze this image and determine if it is a genuine government-issued identity document.
 
-Critères pour accepter:
-- Carte Nationale d'Identité (CNI) de n'importe quel pays
-- Passeport
-- Carte consulaire
-- Permis de conduire
-- Tout document d'identité officiel avec photo
+ACCEPT only:
+- National ID card (CNI) from any country
+- Passport
+- Consular card
+- Driver's license
+- Any official government-issued ID with a photo
 
-Critères pour rejeter:
-- Selfie ou photo de personne sans document
-- Photo de paysage, nourriture, produit, publicité
-- Document non officiel (facture, reçu, carte de visite)
-- Image floue où rien n'est visible
-- Capture d'écran d'un document (accepter quand même si le document est clairement visible)
+REJECT everything else, including but not limited to:
+- Screenshots of any kind
+- Photos of people without a document
+- Weapons, objects, animals, food, landscapes
+- Ads, products, logos, memes
+- Business cards, invoices, receipts
+- Blurry images where nothing is identifiable
+- Any image that is NOT a physical identity document
 
-Réponds UNIQUEMENT avec un JSON valide, rien d'autre:
+You MUST respond with ONLY this exact JSON (no other text):
 {"is_valid_id": true, "document_type": "cni"}
+or
+{"is_valid_id": false, "reason": "not an identity document"}
 
-ou
-
-{"is_valid_id": false, "document_type": "not_id"}
-
-Sois tolérant: en cas de doute raisonnable, accepte le document.`,
+When in doubt, REJECT. Only accept if you are confident this is a real government ID.`,
     ]);
 
     const text = result.response.text().trim();
     console.log('[WA_HANDLER] ID doc raw response:', text);
 
-    // Try JSON parsing first, then fall back to raw text scanning
+    // Try to extract JSON from the response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
@@ -400,7 +411,7 @@ Sois tolérant: en cas de doute raisonnable, accepte le document.`,
         console.log('[WA_HANDLER] ID doc validation result:', parsed);
         return parsed.is_valid_id === true;
       } catch {
-        // JSON was malformed, fall through to text scan
+        console.warn('[WA_HANDLER] Malformed JSON in response, falling back to text scan');
       }
     }
 
@@ -414,13 +425,13 @@ Sois tolérant: en cas de doute raisonnable, accepte le document.`,
       return false;
     }
 
-    // If we truly can't determine, allow through
-    console.warn('[WA_HANDLER] Could not parse ID doc response, allowing through');
-    return true;
+    // FAIL-CLOSED: could not determine result → reject
+    console.warn('[WA_HANDLER] Could not parse ID doc response — rejecting (fail-closed)');
+    return false;
   } catch (error) {
-    // On error, allow through (don't block users due to AI failure)
-    console.error('[WA_HANDLER] ID doc vision validation error:', error);
-    return true;
+    // FAIL-CLOSED: any error (including safety blocks) → reject
+    console.error('[WA_HANDLER] ID doc vision validation error — rejecting (fail-closed):', error);
+    return false;
   }
 }
 

@@ -9,6 +9,8 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 interface Billboard {
   id: string;
   name: string;
+  slug: string;
+  apiKey: string | null;
   address: string;
   status: 'online' | 'offline' | 'maintenance';
   currentContent: { title: string; advertiser: string } | null;
@@ -78,7 +80,7 @@ export default function LiveMonitorPage() {
           <p className="text-slate-500 dark:text-slate-400">No billboards in the network yet</p>
         </div>
       ) : (
-      <div className={view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-3'}>
+      <div className={view === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : 'space-y-3'}>
         {filtered.map((billboard: Billboard) => {
           const config = statusConfig[billboard.status];
           const StatusIcon = config.icon;
@@ -96,18 +98,32 @@ export default function LiveMonitorPage() {
                 </div>
               </div>
 
-              {billboard.currentContent ? (
-                <div className="mb-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Play className="h-3 w-3 text-red-600" />
-                    <span className="text-xs text-red-600 font-bold">NOW PLAYING</span>
+              {billboard.slug && billboard.apiKey ? (
+                <div className="mb-3 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-black">
+                  <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
+                    <iframe
+                      src={`/display/${billboard.slug}?key=${billboard.apiKey}`}
+                      className="absolute inset-0 w-full h-full border-0"
+                      allow="autoplay"
+                      sandbox="allow-scripts allow-same-origin"
+                      title={`Preview: ${billboard.name}`}
+                    />
                   </div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{billboard.currentContent.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{billboard.currentContent.advertiser}</p>
+                  {billboard.currentContent && (
+                    <div className="px-3 py-2 bg-white dark:bg-slate-900 flex items-center gap-2">
+                      <Play className="h-3 w-3 text-red-600 flex-shrink-0" />
+                      <span className="text-xs font-medium text-slate-900 dark:text-white truncate">
+                        {billboard.currentContent.title}
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 truncate ml-auto">
+                        {billboard.currentContent.advertiser}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="mb-3 p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">No content playing</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">No preview available</p>
                 </div>
               )}
 

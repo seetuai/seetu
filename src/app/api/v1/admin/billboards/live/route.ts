@@ -53,6 +53,8 @@ export async function GET(request: NextRequest) {
       return {
         id: b.id,
         name: b.name,
+        slug: b.slug,
+        apiKey: b.apiKey,
         address: b.address,
         status: b.status,
         currentContent: playing ? {

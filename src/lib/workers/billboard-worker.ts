@@ -433,20 +433,12 @@ async function notifyModerationResult(
 
     if (!content?.whatsappPhone) return;
 
-    const { getSession, setContentIds, updateSessionState } = await import('../billboard/whatsapp/session-manager');
+    const { getSession, setContentIds } = await import('../billboard/whatsapp/session-manager');
     const { getWatiClient } = await import('../billboard/whatsapp/wati-client');
     const wati = getWatiClient();
 
     const session = await getSession(content.whatsappPhone);
     if (!session) return;
-
-    // Guard: only proceed if session is still in AWAITING_MEDIA state.
-    // This prevents duplicate billboard lists when multiple moderation jobs
-    // finish concurrently and both pass the "stillPending === 0" check.
-    if (session.state !== 'AWAITING_MEDIA') {
-      console.log(`[BILLBOARD_WORKER] Session ${content.whatsappPhone} already in ${session.state}, skipping duplicate notification`);
-      return;
-    }
 
     const batchContentIds = session.data.contentIds || [];
     if (batchContentIds.length === 0) return;
@@ -463,6 +455,23 @@ async function notifyModerationResult(
 
     // If some items are still being validated/moderated, wait
     if (stillPending.length > 0) return;
+
+    // All items done. Use atomic compare-and-swap to prevent race condition:
+    // Only ONE concurrent caller can transition from AWAITING_MEDIA.
+    // updateMany with state condition is atomic at the DB level.
+    const casResult = await prisma.whatsAppSession.updateMany({
+      where: { phone: content.whatsappPhone, state: 'AWAITING_MEDIA' },
+      data: { state: 'AWAITING_BILLBOARD' },
+    });
+
+    if (casResult.count === 0) {
+      // Another concurrent call already transitioned — bail out
+      console.log(`[BILLBOARD_WORKER] Race lost for ${content.whatsappPhone}, skipping duplicate`);
+      return;
+    }
+
+    // We won the race — proceed with notification
+    console.log(`[BILLBOARD_WORKER] Won race for ${content.whatsappPhone}, sending batch result`);
 
     // All items have been processed — gather approved ones
     const approvedIds = allContents
@@ -484,11 +493,7 @@ async function notifyModerationResult(
       return;
     }
 
-    // Transition FIRST to prevent race condition — other concurrent calls
-    // will see AWAITING_BILLBOARD and bail out via the guard above.
-    await updateSessionState(content.whatsappPhone, 'AWAITING_BILLBOARD', { contentIds: approvedIds });
-
-    // Update session with only approved content IDs
+    // Update session with approved content IDs
     await setContentIds(content.whatsappPhone, approvedIds);
 
     const rejectedItems = allContents.filter(c => c.status === 'rejected');

@@ -454,7 +454,7 @@ async function notifyModerationResult(
     // Check status of all batch items
     const allContents = await prisma.billboardContent.findMany({
       where: { id: { in: batchContentIds } },
-      select: { id: true, status: true },
+      select: { id: true, status: true, rejectionReason: true },
     });
 
     const stillPending = allContents.filter(c =>
@@ -470,10 +470,14 @@ async function notifyModerationResult(
       .map(c => c.id);
 
     if (approvedIds.length === 0) {
-      // All rejected
+      // All rejected — list reasons
+      const rejectedItems = allContents.filter(c => c.status === 'rejected');
+      const reasons = rejectedItems
+        .map((c, i) => `${i + 1}. ${c.rejectionReason || 'Contenu non conforme'}`)
+        .join('\n');
       await wati.sendMessage({
         phone: content.whatsappPhone,
-        message: '❌ Tous vos fichiers ont été refusés. Envoyez de nouveaux fichiers conformes à nos directives.',
+        message: `❌ Tous vos fichiers ont été refusés:\n\n${reasons}\n\nEnvoyez de nouveaux fichiers conformes à nos directives.`,
       });
       const { resetSession } = await import('../billboard/whatsapp/session-manager');
       await resetSession(content.whatsappPhone);
@@ -487,11 +491,14 @@ async function notifyModerationResult(
     // Update session with only approved content IDs
     await setContentIds(content.whatsappPhone, approvedIds);
 
-    const rejectedCount = batchContentIds.length - approvedIds.length;
-    if (rejectedCount > 0) {
+    const rejectedItems = allContents.filter(c => c.status === 'rejected');
+    if (rejectedItems.length > 0) {
+      const reasons = rejectedItems
+        .map((c, i) => `  ${i + 1}. ${c.rejectionReason || 'Contenu non conforme'}`)
+        .join('\n');
       await wati.sendMessage({
         phone: content.whatsappPhone,
-        message: `✅ ${approvedIds.length} fichier(s) approuvé(s), ${rejectedCount} refusé(s).`,
+        message: `✅ ${approvedIds.length} fichier(s) approuvé(s), ${rejectedItems.length} refusé(s):\n\n${reasons}`,
       });
     }
 

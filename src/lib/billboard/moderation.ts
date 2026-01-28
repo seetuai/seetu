@@ -218,9 +218,22 @@ IMPORTANT: Most advertising content is normal and should be APPROVED. Only rejec
     let reviewRequired = false;
     let rejectionReason: string | undefined;
 
+    // French labels for rejection reasons
+    const categoryLabels: Record<string, string> = {
+      nudity: 'Nudité/contenu sexuel',
+      violence: 'Violence',
+      hate_speech: 'Discours haineux',
+      political: 'Contenu politique',
+      explicit_text: 'Langage explicite',
+      drugs_alcohol: 'Drogues/alcool',
+      gambling: 'Jeux d\'argent',
+      copyright: 'Droits d\'auteur',
+    };
+
     if (highRiskCategories.length > 0) {
       approved = false;
-      rejectionReason = `Content flagged for: ${highRiskCategories.map(c => c.category.replace('_', ' ')).join(', ')}`;
+      const flaggedLabels = highRiskCategories.map(c => categoryLabels[c.category] || c.category).join(', ');
+      rejectionReason = `Contenu interdit: ${flaggedLabels}`;
     } else if (mediumRiskCategories.length > 0) {
       approved = true; // Tentatively approved, but needs review
       reviewRequired = true;

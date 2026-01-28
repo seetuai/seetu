@@ -392,17 +392,31 @@ Sois tolérant: en cas de doute raisonnable, accepte le document.`,
     const text = result.response.text().trim();
     console.log('[WA_HANDLER] ID doc raw response:', text);
 
-    // Extract JSON from response — handle markdown code blocks or extra text
-    const jsonMatch = text.match(/\{[\s\S]*?\}/);
-    if (!jsonMatch) {
-      console.warn('[WA_HANDLER] No JSON found in ID doc response, allowing through');
-      return true;
+    // Try JSON parsing first, then fall back to raw text scanning
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        console.log('[WA_HANDLER] ID doc validation result:', parsed);
+        return parsed.is_valid_id === true;
+      } catch {
+        // JSON was malformed, fall through to text scan
+      }
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    console.log('[WA_HANDLER] ID doc validation result:', parsed);
+    // Fallback: scan raw text for the boolean value (handles truncated JSON)
+    if (/"is_valid_id"\s*:\s*true/i.test(text)) {
+      console.log('[WA_HANDLER] ID doc accepted (text scan fallback)');
+      return true;
+    }
+    if (/"is_valid_id"\s*:\s*false/i.test(text)) {
+      console.log('[WA_HANDLER] ID doc rejected (text scan fallback)');
+      return false;
+    }
 
-    return parsed.is_valid_id === true;
+    // If we truly can't determine, allow through
+    console.warn('[WA_HANDLER] Could not parse ID doc response, allowing through');
+    return true;
   } catch (error) {
     // On error, allow through (don't block users due to AI failure)
     console.error('[WA_HANDLER] ID doc vision validation error:', error);

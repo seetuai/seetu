@@ -44,6 +44,12 @@ export const VERIFICATION_INVALID_FORMAT = `Veuillez envoyer une *photo* de votr
 Les formats acceptés sont: JPG, PNG.
 Pas de PDF, vidéo ou document.`;
 
+export const VERIFICATION_NOT_ID = `Cette image ne semble pas être une pièce d'identité valide.
+
+Veuillez envoyer une photo claire de votre *CNI* (Carte Nationale d'Identité) ou *Passeport*.
+
+Assurez-vous que le document est bien visible et lisible.`;
+
 // ═══════════════════════════════════════════════════════════════
 // MEDIA HANDLING
 // ═══════════════════════════════════════════════════════════════

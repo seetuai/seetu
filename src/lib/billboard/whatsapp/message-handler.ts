@@ -292,6 +292,17 @@ async function processIdDocument(
     const buffer = Buffer.from(await response.arrayBuffer());
     const contentType = response.headers.get('content-type') || 'image/jpeg';
 
+    // Verify the image is actually an ID document using Gemini Vision
+    const isValidId = await verifyIdDocumentWithVision(buffer, contentType);
+    if (!isValidId) {
+      console.log(`[WA_HANDLER] ID doc rejected for ${message.phone} — not a valid ID`);
+      await wati.sendMessage({
+        phone: message.phone,
+        message: templates.VERIFICATION_NOT_ID,
+      });
+      return { success: true };
+    }
+
     // Upload to private storage
     const upload = await uploadWhatsAppIdDoc(buffer, message.phone, contentType);
 
@@ -317,6 +328,74 @@ async function processIdDocument(
       message: 'Erreur lors du traitement de votre document. Veuillez réessayer.',
     });
     return { success: false, error: 'ID doc processing failed' };
+  }
+}
+
+/**
+ * Verify an image is a valid identity document using Gemini Vision
+ * Returns true if the image looks like a CNI, passport, or similar government ID
+ */
+async function verifyIdDocumentWithVision(
+  buffer: Buffer,
+  contentType: string
+): Promise<boolean> {
+  if (!genAI) {
+    // If Gemini is not configured, skip validation (allow through)
+    console.warn('[WA_HANDLER] Gemini not configured, skipping ID doc validation');
+    return true;
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 200,
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const base64Image = buffer.toString('base64');
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: contentType,
+          data: base64Image,
+        },
+      },
+      `Analyse cette image. Est-ce une pièce d'identité officielle ?
+
+Critères pour accepter:
+- Carte Nationale d'Identité (CNI) de n'importe quel pays
+- Passeport
+- Carte consulaire
+- Permis de conduire
+- Tout document d'identité officiel avec photo
+
+Critères pour rejeter:
+- Selfie ou photo de personne sans document
+- Photo de paysage, nourriture, produit, publicité
+- Document non officiel (facture, reçu, carte de visite)
+- Image floue où rien n'est visible
+- Capture d'écran d'un document (accepter quand même si le document est clairement visible)
+
+Retourne un JSON:
+{"is_valid_id": true/false, "document_type": "cni|passport|permis|autre_id|not_id", "confidence": "high|medium|low"}
+
+Sois tolérant: en cas de doute raisonnable, accepte le document.`,
+    ]);
+
+    const text = result.response.text();
+    const parsed = JSON.parse(text);
+
+    console.log('[WA_HANDLER] ID doc validation result:', parsed);
+
+    return parsed.is_valid_id === true;
+  } catch (error) {
+    // On error, allow through (don't block users due to AI failure)
+    console.error('[WA_HANDLER] ID doc vision validation error:', error);
+    return true;
   }
 }
 

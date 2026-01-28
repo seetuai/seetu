@@ -44,7 +44,7 @@ export default function RevenuePage() {
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-lg">
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">Total Revenue</p>
-          <p className="text-3xl font-bold text-slate-900 dark:text-white">{(stats.totalRevenue / 1000000).toFixed(1)}M <span className="text-sm text-slate-500">FCFA</span></p>
+          <p className="text-3xl font-bold text-slate-900 dark:text-white">{stats.totalRevenue >= 1000000 ? `${(stats.totalRevenue / 1000000).toFixed(1)}M` : stats.totalRevenue.toLocaleString()} <span className="text-sm text-slate-500">FCFA</span></p>
         </div>
         <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-lg">
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">Monthly Growth</p>

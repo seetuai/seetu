@@ -1064,7 +1064,14 @@ model WhatsAppSession {
   idDocPath        String?               @map("id_doc_path")
   verifiedAt       DateTime?             @map("verified_at")
 
+  // OCR-extracted data from ID document
+  idFullName       String?               @map("id_full_name")
+  idNumber         String?               @map("id_number")
+  idDateOfBirth    String?               @map("id_date_of_birth")
+  idDocumentType   String?               @map("id_document_type")
+
   @@index([state])
+  @@index([idNumber])
   @@index([expiresAt])
   @@map("whatsapp_sessions")
 }

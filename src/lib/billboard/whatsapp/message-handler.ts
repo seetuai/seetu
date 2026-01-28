@@ -16,8 +16,10 @@ import {
   addPendingMedia,
   getPendingMedia,
   markVerified,
+  findDuplicateIdNumber,
   Session,
   SessionData,
+  OcrData,
 } from './session-manager';
 import { scheduleBatchProcessing } from '../../queues/billboard-queue';
 import * as templates from './templates';
@@ -303,13 +305,30 @@ async function processIdDocument(
       return { success: true };
     }
 
+    // OCR-extract structured data (second Gemini call)
+    // If this fails, user still gets verified — OCR fields stay null
+    const ocrData = await extractIdDocumentData(buffer, contentType);
+
+    // Duplicate ID check: if we extracted an ID number, check it's not already used
+    if (ocrData?.idNumber) {
+      const duplicatePhone = await findDuplicateIdNumber(ocrData.idNumber, message.phone);
+      if (duplicatePhone) {
+        console.log(`[WA_HANDLER] Duplicate ID number ${ocrData.idNumber} for ${message.phone} (already used by ${duplicatePhone})`);
+        await wati.sendMessage({
+          phone: message.phone,
+          message: templates.VERIFICATION_DUPLICATE_ID,
+        });
+        return { success: true };
+      }
+    }
+
     // Upload to private storage
     const upload = await uploadWhatsAppIdDoc(buffer, message.phone, contentType);
 
-    // Mark user as verified
-    await markVerified(message.phone, upload.path);
+    // Mark user as verified (with OCR data if available)
+    await markVerified(message.phone, upload.path, ocrData);
 
-    console.log(`[WA_HANDLER] User ${message.phone} identity verified, doc: ${upload.path}`);
+    console.log(`[WA_HANDLER] User ${message.phone} identity verified, doc: ${upload.path}, ocr: ${ocrData ? JSON.stringify(ocrData) : 'null'}`);
 
     // Send success message
     await wati.sendMessage({
@@ -432,6 +451,94 @@ When in doubt, REJECT. Only accept if you are confident this is a real governmen
     // FAIL-CLOSED: any error (including safety blocks) → reject
     console.error('[WA_HANDLER] ID doc vision validation error — rejecting (fail-closed):', error);
     return false;
+  }
+}
+
+/**
+ * Normalize an ID number for deduplication
+ * Strips spaces, dashes, dots and uppercases
+ */
+function normalizeIdNumber(raw: string): string {
+  return raw.replace(/[\s\-\.]/g, '').toUpperCase();
+}
+
+/**
+ * OCR-extract structured data from an ID document using Gemini Vision
+ * Returns null on any error (graceful degradation — user still gets verified)
+ */
+async function extractIdDocumentData(
+  buffer: Buffer,
+  contentType: string
+): Promise<OcrData | null> {
+  if (!genAI) {
+    console.warn('[WA_HANDLER] Gemini not configured — skipping OCR extraction');
+    return null;
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 1024,
+      },
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ],
+    });
+
+    const base64Image = buffer.toString('base64');
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: contentType,
+          data: base64Image,
+        },
+      },
+      `You are an OCR specialist. Extract the following fields from this identity document image.
+
+Return ONLY this JSON (no other text):
+{
+  "fullName": "FULL NAME as written on the document or null",
+  "idNumber": "Document ID/number as written on the document or null",
+  "dateOfBirth": "Date of birth as written (any format) or null",
+  "documentType": "cni | passport | driver_license | consular_card | other"
+}
+
+Rules:
+- Extract text EXACTLY as printed on the document
+- If a field is not visible or not readable, use null
+- For idNumber, include all characters (letters and digits)
+- For documentType, use the closest match from the list above
+- Do NOT invent or guess data — only extract what is clearly visible`,
+    ]);
+
+    const text = result.response.text().trim();
+    console.log('[WA_HANDLER] OCR raw response:', text);
+
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn('[WA_HANDLER] No JSON found in OCR response');
+      return null;
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const ocrData: OcrData = {
+      fullName: parsed.fullName || null,
+      idNumber: parsed.idNumber ? normalizeIdNumber(parsed.idNumber) : null,
+      dateOfBirth: parsed.dateOfBirth || null,
+      documentType: parsed.documentType || null,
+    };
+
+    console.log('[WA_HANDLER] OCR extracted:', ocrData);
+    return ocrData;
+  } catch (error) {
+    console.error('[WA_HANDLER] OCR extraction error (graceful degradation):', error);
+    return null;
   }
 }
 

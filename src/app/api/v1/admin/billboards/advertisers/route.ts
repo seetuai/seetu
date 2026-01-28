@@ -33,6 +33,10 @@ export async function GET(request: NextRequest) {
         isVerified: true,
         verifiedAt: true,
         idDocPath: true,
+        idFullName: true,
+        idNumber: true,
+        idDateOfBirth: true,
+        idDocumentType: true,
         lastMessageAt: true,
         createdAt: true,
       },
@@ -77,7 +81,7 @@ export async function GET(request: NextRequest) {
         const stats = paymentMap.get(s.phone) || { totalSpent: 0, campaigns: 0 };
         return {
           id: s.id,
-          name: s.name || s.phone,
+          name: s.idFullName || s.name || s.phone,
           phone: s.phone,
           type: 'whatsapp' as const,
           totalSpent: stats.totalSpent,
@@ -87,6 +91,10 @@ export async function GET(request: NextRequest) {
           isVerified: s.isVerified,
           verifiedAt: s.verifiedAt?.toISOString() || null,
           hasIdDoc: !!s.idDocPath,
+          idFullName: s.idFullName,
+          idNumber: s.idNumber,
+          idDateOfBirth: s.idDateOfBirth,
+          idDocumentType: s.idDocumentType,
         };
       }),
       // Platform advertisers

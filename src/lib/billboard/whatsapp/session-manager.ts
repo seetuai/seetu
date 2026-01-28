@@ -41,6 +41,13 @@ export interface SessionData {
   awaitingDateInput?: boolean; // Flag for when user picked "Programmer" and we're waiting for free-text date
 }
 
+export interface OcrData {
+  fullName: string | null;
+  idNumber: string | null;
+  dateOfBirth: string | null;
+  documentType: string | null;
+}
+
 export interface Session {
   id: string;
   phone: string;
@@ -52,6 +59,10 @@ export interface Session {
   isVerified: boolean;
   idDocPath: string | null;
   verifiedAt: Date | null;
+  idFullName: string | null;
+  idNumber: string | null;
+  idDateOfBirth: string | null;
+  idDocumentType: string | null;
 }
 
 /**
@@ -120,6 +131,10 @@ export async function getOrCreateSession(
     isVerified: session.isVerified,
     idDocPath: session.idDocPath,
     verifiedAt: session.verifiedAt,
+    idFullName: session.idFullName,
+    idNumber: session.idNumber,
+    idDateOfBirth: session.idDateOfBirth,
+    idDocumentType: session.idDocumentType,
   };
 }
 
@@ -164,6 +179,10 @@ export async function updateSessionState(
     isVerified: session.isVerified,
     idDocPath: session.idDocPath,
     verifiedAt: session.verifiedAt,
+    idFullName: session.idFullName,
+    idNumber: session.idNumber,
+    idDateOfBirth: session.idDateOfBirth,
+    idDocumentType: session.idDocumentType,
   };
 }
 
@@ -263,6 +282,10 @@ export async function resetSession(phone: string): Promise<Session> {
     isVerified: session.isVerified,
     idDocPath: session.idDocPath,
     verifiedAt: session.verifiedAt,
+    idFullName: session.idFullName,
+    idNumber: session.idNumber,
+    idDateOfBirth: session.idDateOfBirth,
+    idDocumentType: session.idDocumentType,
   };
 }
 
@@ -281,11 +304,37 @@ export async function expireSession(phone: string): Promise<void> {
 /**
  * Mark a WhatsApp advertiser as identity-verified
  */
-export async function markVerified(phone: string, idDocPath: string): Promise<void> {
+export async function markVerified(phone: string, idDocPath: string, ocrData?: OcrData | null): Promise<void> {
   await prisma.whatsAppSession.update({
     where: { phone },
-    data: { isVerified: true, idDocPath, verifiedAt: new Date() },
+    data: {
+      isVerified: true,
+      idDocPath,
+      verifiedAt: new Date(),
+      ...(ocrData && {
+        idFullName: ocrData.fullName,
+        idNumber: ocrData.idNumber,
+        idDateOfBirth: ocrData.dateOfBirth,
+        idDocumentType: ocrData.documentType,
+      }),
+    },
   });
+}
+
+/**
+ * Find if an ID number is already used by another phone number
+ * Returns the duplicate phone or null
+ */
+export async function findDuplicateIdNumber(idNumber: string, excludePhone: string): Promise<string | null> {
+  const existing = await prisma.whatsAppSession.findFirst({
+    where: {
+      idNumber,
+      phone: { not: excludePhone },
+      isVerified: true,
+    },
+    select: { phone: true },
+  });
+  return existing?.phone || null;
 }
 
 /**
@@ -309,6 +358,10 @@ export async function getSession(phone: string): Promise<Session | null> {
     isVerified: session.isVerified,
     idDocPath: session.idDocPath,
     verifiedAt: session.verifiedAt,
+    idFullName: session.idFullName,
+    idNumber: session.idNumber,
+    idDateOfBirth: session.idDateOfBirth,
+    idDocumentType: session.idDocumentType,
   };
 }
 
@@ -335,6 +388,10 @@ export async function getSessionByContentId(contentId: string): Promise<Session 
     isVerified: session.isVerified,
     idDocPath: session.idDocPath,
     verifiedAt: session.verifiedAt,
+    idFullName: session.idFullName,
+    idNumber: session.idNumber,
+    idDateOfBirth: session.idDateOfBirth,
+    idDocumentType: session.idDocumentType,
   };
 }
 

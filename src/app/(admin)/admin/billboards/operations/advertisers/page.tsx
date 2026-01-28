@@ -17,6 +17,10 @@ interface Advertiser {
   status: 'active' | 'vip' | 'suspended';
   lastActivity: string;
   isVerified: boolean;
+  idFullName?: string | null;
+  idNumber?: string | null;
+  idDateOfBirth?: string | null;
+  idDocumentType?: string | null;
 }
 
 export default function AdvertisersPage() {
@@ -29,7 +33,9 @@ export default function AdvertisersPage() {
   const filtered = advertisers.filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase()) ||
     a.email?.toLowerCase().includes(search.toLowerCase()) ||
-    a.phone?.includes(search)
+    a.phone?.includes(search) ||
+    a.idFullName?.toLowerCase().includes(search.toLowerCase()) ||
+    a.idNumber?.toLowerCase().includes(search.toLowerCase())
   );
 
   if (isLoading) {
@@ -105,6 +111,8 @@ export default function AdvertisersPage() {
               <th className="px-6 py-4">Advertiser</th>
               <th className="px-6 py-4">Type</th>
               <th className="px-6 py-4">Verified</th>
+              <th className="px-6 py-4">ID Number</th>
+              <th className="px-6 py-4">Document</th>
               <th className="px-6 py-4">Total Spent</th>
               <th className="px-6 py-4">Campaigns</th>
               <th className="px-6 py-4">Status</th>
@@ -149,6 +157,12 @@ export default function AdvertisersPage() {
                       Unverified
                     </span>
                   )}
+                </td>
+                <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-300 font-mono">
+                  {advertiser.idNumber || <span className="text-slate-400">—</span>}
+                </td>
+                <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-300">
+                  {advertiser.idDocumentType ? advertiser.idDocumentType.toUpperCase() : <span className="text-slate-400">—</span>}
                 </td>
                 <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{advertiser.totalSpent.toLocaleString()} FCFA</td>
                 <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{advertiser.campaigns}</td>

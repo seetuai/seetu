@@ -50,6 +50,12 @@ Veuillez envoyer une photo claire de votre *CNI* (Carte Nationale d'Identité) o
 
 Assurez-vous que le document est bien visible et lisible.`;
 
+export const VERIFICATION_DUPLICATE_ID = `Ce document d'identité est déjà associé à un autre compte.
+
+Chaque numéro de pièce d'identité ne peut être utilisé qu'une seule fois.
+
+Si vous pensez qu'il s'agit d'une erreur, contactez notre support en envoyant "support".`;
+
 // ═══════════════════════════════════════════════════════════════
 // MEDIA HANDLING
 // ═══════════════════════════════════════════════════════════════

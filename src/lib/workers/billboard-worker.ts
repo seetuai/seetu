@@ -177,6 +177,7 @@ async function processModeration(
           categories: result.categories,
           overallRisk: result.overallRisk,
           reviewRequired: result.reviewRequired,
+          rawAnalysis: result.rawAnalysis,
         })),
       },
     });

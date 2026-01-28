@@ -83,7 +83,6 @@ function parseAnalysis(analysisText: string): {
   const categories: CategoryResult[] = [];
   let overallRisk: 'low' | 'medium' | 'high' = 'low';
 
-  // Default categories to check
   const categoryChecks: ModerationCategory[] = [
     'nudity',
     'violence',
@@ -95,54 +94,70 @@ function parseAnalysis(analysisText: string): {
     'copyright',
   ];
 
-  const lowerAnalysis = analysisText.toLowerCase();
-
   for (const category of categoryChecks) {
-    // Look for confidence scores in format "category: 0.X" or mentions
-    const categoryRegex = new RegExp(`${category.replace('_', '[_\\s]?')}[:\\s]*(\\d+\\.?\\d*|high|medium|low|yes|no|detected|not detected)`, 'i');
-    const match = analysisText.match(categoryRegex);
+    // Match the full line: CATEGORY: score | detected: yes/no | notes: ...
+    // Gemini returns "confidence in assessment" NOT "confidence of detection".
+    // e.g., "VIOLENCE: 1.0 | detected: no" means "100% confident no violence"
+    // We MUST parse the "detected: yes/no" field to know the actual result.
+    const catPattern = category.replace('_', '[_\\s]?');
+    const lineRegex = new RegExp(
+      `${catPattern}[:\\s]*(\\d+\\.?\\d*)\\s*\\|\\s*detected:\\s*(yes|no)`,
+      'i'
+    );
+    const lineMatch = analysisText.match(lineRegex);
 
     let confidence = 0;
     let detected = false;
     let description: string | undefined;
 
-    if (match) {
-      const value = match[1].toLowerCase();
-      if (value === 'high' || value === 'yes' || value === 'detected') {
-        confidence = 0.9;
-        detected = true;
-      } else if (value === 'medium') {
-        confidence = 0.6;
-        detected = true;
-      } else if (value === 'low') {
-        confidence = 0.3;
-      } else if (value === 'no' || value === 'not detected') {
-        confidence = 0;
+    if (lineMatch) {
+      // Structured format: "CATEGORY: score | detected: yes/no"
+      const score = parseFloat(lineMatch[1]);
+      const detectedField = lineMatch[2].toLowerCase();
+
+      if (detectedField === 'yes') {
+        // Score is confidence of detection — use it directly
+        confidence = Math.min(score, 1.0); // Clamp to 0-1
+        detected = confidence > 0;
       } else {
-        confidence = parseFloat(value);
-        detected = confidence > REVIEW_THRESHOLD;
+        // detected: no — regardless of score, this category is clean
+        confidence = 0;
+        detected = false;
+      }
+
+      // Extract notes if present
+      const notesMatch = analysisText.match(
+        new RegExp(`${catPattern}[^\\n]*notes:\\s*([^\\n]+)`, 'i')
+      );
+      if (notesMatch) {
+        description = notesMatch[1].trim();
       }
     } else {
-      // Simple keyword detection as fallback
-      const keywords: Record<ModerationCategory, string[]> = {
-        nudity: ['nudity', 'naked', 'explicit', 'nsfw', 'adult content'],
-        violence: ['violence', 'gore', 'blood', 'violent', 'weapon'],
-        hate_speech: ['hate', 'racist', 'discriminatory', 'offensive symbol'],
-        political: ['political', 'election', 'campaign', 'propaganda', 'party'],
-        explicit_text: ['profanity', 'vulgar', 'obscene text', 'explicit language'],
-        drugs_alcohol: ['drugs', 'alcohol', 'smoking', 'substance'],
-        gambling: ['gambling', 'casino', 'betting', 'lottery'],
-        copyright: ['copyright', 'trademarked', 'brand logo', 'watermark'],
-      };
+      // Fallback: try simpler format "CATEGORY: value"
+      const simpleRegex = new RegExp(
+        `${catPattern}[:\\s]*(\\d+\\.?\\d*|high|medium|low|yes|no|not detected|detected)`,
+        'i'
+      );
+      const simpleMatch = analysisText.match(simpleRegex);
 
-      for (const keyword of keywords[category]) {
-        if (lowerAnalysis.includes(keyword)) {
-          confidence = 0.7;
+      if (simpleMatch) {
+        const value = simpleMatch[1].toLowerCase();
+        if (value === 'high' || value === 'yes' || value === 'detected') {
+          confidence = 0.9;
           detected = true;
-          description = `Potential ${category.replace('_', ' ')} content detected`;
-          break;
+        } else if (value === 'medium') {
+          confidence = 0.6;
+          detected = true;
+        } else if (value === 'low') {
+          confidence = 0.3;
+        } else if (value === 'no' || value === 'not detected') {
+          confidence = 0;
+        } else {
+          confidence = Math.min(parseFloat(value), 1.0);
+          detected = confidence > REVIEW_THRESHOLD;
         }
       }
+      // No keyword fallback — rely on Gemini's structured response
     }
 
     categories.push({

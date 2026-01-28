@@ -459,7 +459,7 @@ When in doubt, REJECT. Only accept if you are confident this is a real governmen
  * Strips spaces, dashes, dots and uppercases
  */
 function normalizeIdNumber(raw: string): string {
-  return raw.replace(/[\s\-\.]/g, '').toUpperCase();
+  return raw.replace(/[\s\-.]/g, '').toUpperCase();
 }
 
 /**

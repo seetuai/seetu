@@ -661,7 +661,7 @@ async function urlToBase64(url: string): Promise<{ data: string; mimeType: strin
   try {
     if (url.startsWith('data:')) {
       const [header, data] = url.split(',');
-      let mimeType = header.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+      let mimeType = (header.match(/data:([^;]+)/)?.[1] || 'image/jpeg').toLowerCase();
       // Normalize image/jpg to image/jpeg (jpg is not a valid MIME type)
       if (mimeType === 'image/jpg') {
         mimeType = 'image/jpeg';
@@ -702,7 +702,7 @@ async function urlToBase64(url: string): Promise<{ data: string; mimeType: strin
 
     try {
       const { buffer, mimeType: fetchedMimeType } = await safeFetchImage(url);
-      let mimeType = fetchedMimeType;
+      let mimeType = fetchedMimeType.toLowerCase();
       // Normalize image/jpg to image/jpeg
       if (mimeType === 'image/jpg') {
         mimeType = 'image/jpeg';
